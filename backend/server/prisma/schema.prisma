@@ -1,0 +1,209 @@
+// ArthSaathi — Prisma schema
+// Postgres backs all structured/relational state.
+// FAISS (separate, file-based) continues to handle RAG/semantic search —
+// no overlap: this DB never stores embeddings or vector indices.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+
+
+// ---------- Core identity ----------
+model User {
+  id            String   @id @default(cuid())
+  phone         String?  @unique
+  email         String?  @unique
+  name          String?
+  preferredLang String   @default("en") // en, hi, mr, kn — matches embedding model's language coverage
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  financialProfile FinancialProfile?
+  goals            Goal[]
+  sessions         ConversationSession[]
+  agentRuns        AgentRun[]
+  scamAlerts       ScamAlert[]
+  schemeMatches    SchemeMatch[]
+  simulations      SimulationResult[]
+}
+
+
+
+// ---------- Inputs to the parallel agents ----------
+// Feeds the Financial Analysis Agent
+model FinancialProfile {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  monthlyIncome   Decimal
+  monthlyExpenses Decimal
+  existingSavings Decimal  @default(0)
+  existingDebt    Decimal  @default(0)
+  dependents      Int      @default(0)
+  employmentType  String?  // salaried, self-employed, gig, unemployed — drives scheme matching too
+
+  updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now())
+
+  riskAssessments RiskAssessment[]
+}
+
+
+
+// Feeds / consumed by Goal Discovery Agent
+model Goal {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  title       String   // e.g. "Buy a house", "Child's education"
+  targetAmount Decimal
+  targetDate  DateTime?
+  priority    Int      @default(0) // for Coach Agent to sequence advice
+  status      GoalStatus @default(ACTIVE)
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  simulations SimulationResult[]
+}
+
+enum GoalStatus {
+  ACTIVE
+  ACHIEVED
+  ABANDONED
+}
+
+
+
+// ---------- Outputs of the parallel agents ----------
+// Output of Risk Assessment Agent
+model RiskAssessment {
+  id                 String   @id @default(cuid())
+  financialProfileId String
+  financialProfile   FinancialProfile @relation(fields: [financialProfileId], references: [id], onDelete: Cascade)
+
+  riskScore    Float    // computed in Python, not the LLM
+  riskCategory String   // low, moderate, high
+  factors      Json     // structured breakdown, e.g. { "debtToIncome": 0.4, "emergencyFundMonths": 1.2 }
+
+  createdAt DateTime @default(now())
+}
+
+
+
+// Output of Scam Detection Agent
+model ScamAlert {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  inputText   String   // the message/scheme/offer the user asked about
+  isFlagged   Boolean
+  confidence  Float
+  matchedPatternIds String[] // references into the Scam Patterns FAISS store, not FKs — vector store owns those docs
+
+  createdAt DateTime @default(now())
+}
+
+
+
+// Output of Government Scheme Matching Agent
+model SchemeMatch {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  schemeName     String
+  eligible       Boolean
+  eligibilityGap String?  // if not eligible, what's missing — for Coach Agent to act on
+  sourceDocIds   String[] // references into Government Schemes FAISS store
+
+  createdAt DateTime @default(now())
+}
+
+
+
+// ---------- Outputs of the sequential agents ----------
+// Output of Future Simulation Agent (Monte Carlo / NumPy — Python owns the math)
+model SimulationResult {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  goalId    String?
+  goal      Goal?    @relation(fields: [goalId], references: [id], onDelete: SetNull)
+
+  scenario       String   // e.g. "base", "optimistic", "pessimistic"
+  successProb    Float    // Monte Carlo output, e.g. probability of reaching goal
+  projectedValue Decimal
+  horizonMonths  Int
+  rawOutput      Json     // full simulation payload for Explainability Agent to narrate
+
+  createdAt DateTime @default(now())
+}
+
+
+
+// Every agent invocation — lets you show judges a clean audit trail
+model AgentRun {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sessionId String?
+  session   ConversationSession? @relation(fields: [sessionId], references: [id], onDelete: SetNull)
+
+  agentName String   // "FinancialAnalysis", "RiskAssessment", "ScamDetection",
+                      // "GovSchemeMatching", "GoalDiscovery", "FutureSimulation",
+                      // "Explainability", "Coach", "Accessibility"
+  input     Json
+  output    Json
+  latencyMs Int?
+  status    AgentRunStatus @default(SUCCESS)
+
+  createdAt DateTime @default(now())
+}
+
+enum AgentRunStatus {
+  SUCCESS
+  FAILURE
+  PARTIAL
+}
+
+
+
+// ---------- Conversation layer ----------
+model ConversationSession {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  language  String   @default("en")
+  startedAt DateTime @default(now())
+  endedAt   DateTime?
+
+  messages  Message[]
+  agentRuns AgentRun[]
+}
+
+model Message {
+  id        String   @id @default(cuid())
+  sessionId String
+  session   ConversationSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  role      MessageRole
+  content   String   // narration text only — never raw computation, per the LLM-narrates/Python-computes rule
+  createdAt DateTime @default(now())
+}
+
+enum MessageRole {
+  USER
+  ASSISTANT
+  SYSTEM
+}
