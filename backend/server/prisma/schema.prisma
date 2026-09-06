@@ -12,6 +12,59 @@ datasource db {
 }
 
 
+// ---------- Enums ----------
+
+enum GoalStatus {
+  ACTIVE
+  ACHIEVED
+  ABANDONED
+}
+
+enum AgentRunStatus {
+  SUCCESS
+  FAILURE
+  PARTIAL
+}
+
+enum MessageRole {
+  USER
+  ASSISTANT
+  SYSTEM
+}
+
+// Employment type drives scheme eligibility and income volatility scoring
+enum EmploymentType {
+  SALARIED
+  GIG            // Zomato, Swiggy, Ola, Uber, etc.
+  SELF_EMPLOYED  // Shop owner, freelancer, consultant
+  FARMER
+  DAILY_WAGE
+  UNEMPLOYED
+}
+
+// Risk appetite drives which Monte Carlo path is recommended
+enum RiskAppetite {
+  CONSERVATIVE
+  MODERATE
+  AGGRESSIVE
+}
+
+// Gender drives Stand Up India eligibility and Sukanya Samriddhi Yojana
+enum Gender {
+  MALE
+  FEMALE
+  OTHER
+}
+
+// Caste category drives Stand Up India eligibility
+enum CasteCategory {
+  GENERAL
+  OBC
+  SC
+  ST
+}
+
+
 
 // ---------- Core identity ----------
 model User {
@@ -35,18 +88,41 @@ model User {
 
 
 // ---------- Inputs to the parallel agents ----------
-// Feeds the Financial Analysis Agent
+// Feeds Financial Analysis Agent, Risk Assessment Agent, Scheme Matching Agent
 model FinancialProfile {
   id        String   @id @default(cuid())
   userId    String   @unique
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  // --- Core financials (Financial Analysis Agent) ---
   monthlyIncome   Decimal
   monthlyExpenses Decimal
+  monthlyEmi      Decimal  @default(0)  // monthly EMI payments — used separately in DTI calc
   existingSavings Decimal  @default(0)
   existingDebt    Decimal  @default(0)
   dependents      Int      @default(0)
-  employmentType  String?  // salaried, self-employed, gig, unemployed — drives scheme matching too
+  employmentType  EmploymentType @default(SALARIED)
+
+  // --- Demographics (Government Scheme Matching Agent) ---
+  age                Int?            // APY: 18–40, PMSBY: 18–70, SCSS: 60+
+  gender             Gender?         // Stand Up India, Sukanya Samriddhi
+  state              String?         // State-specific schemes (e.g. Arogyashri for AP/Telangana)
+  isRural            Boolean         @default(false)  // PMAY-G vs PMAY-U, PM Kisan
+  casteCategory      CasteCategory?  // Stand Up India requires SC/ST or women
+  landHoldingAcres   Decimal?        // PM Kisan eligibility (farmers only)
+  businessType       String?         // MUDRA tier (retail/service/manufacturing) — self-employed only
+
+  // --- Insurance & banking gaps (Scheme Matching Agent) ---
+  hasBankAccount     Boolean  @default(true)   // false → Jan Dhan priority
+  hasInsurance       Boolean  @default(false)  // false → PMSBY + PMJJBY recommendation
+  hasHealthInsurance Boolean  @default(false)  // false → PMJAY eligibility check
+
+  // --- Simulation inputs (Future Simulation Agent) ---
+  riskAppetite    RiskAppetite @default(MODERATE)  // drives Monte Carlo path selection
+
+  // --- Credibility Engine output (stored after pre-flight validation) ---
+  credibilityScore  Float?    // 0–100, computed in Python before agents run
+  credibilityFlags  String[]  // e.g. ["debt_exceeds_annual_income"]
 
   updatedAt DateTime @updatedAt
   createdAt DateTime @default(now())
@@ -56,28 +132,23 @@ model FinancialProfile {
 
 
 
-// Feeds / consumed by Goal Discovery Agent
+// Feeds / consumed by Goal Discovery Agent and Future Simulation Agent
 model Goal {
   id          String   @id @default(cuid())
   userId      String
   user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  title       String   // e.g. "Buy a house", "Child's education"
+  title        String        // e.g. "Buy a house", "Child's education"
   targetAmount Decimal
-  targetDate  DateTime?
-  priority    Int      @default(0) // for Coach Agent to sequence advice
-  status      GoalStatus @default(ACTIVE)
+  targetDate   DateTime?     // optional — use horizonMonths if date unknown
+  horizonMonths Int?         // alternative to targetDate — easier for Monte Carlo input
+  priority     Int           @default(0) // for Coach Agent to sequence advice
+  status       GoalStatus    @default(ACTIVE)
 
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
   simulations SimulationResult[]
-}
-
-enum GoalStatus {
-  ACTIVE
-  ACHIEVED
-  ABANDONED
 }
 
 
@@ -89,9 +160,10 @@ model RiskAssessment {
   financialProfileId String
   financialProfile   FinancialProfile @relation(fields: [financialProfileId], references: [id], onDelete: Cascade)
 
-  riskScore    Float    // computed in Python, not the LLM
-  riskCategory String   // low, moderate, high
-  factors      Json     // structured breakdown, e.g. { "debtToIncome": 0.4, "emergencyFundMonths": 1.2 }
+  riskScore       Float    // composite 0–100, computed in Python
+  riskCategory    String   // low / moderate / high
+  factors         Json     // { debtScore, emergencyScore, incomeScore, surplusScore, investmentScore }
+  healthSummary   String?  // one-line plain-language summary for Explainability Agent
 
   createdAt DateTime @default(now())
 }
@@ -104,10 +176,11 @@ model ScamAlert {
   userId    String
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  inputText   String   // the message/scheme/offer the user asked about
-  isFlagged   Boolean
-  confidence  Float
-  matchedPatternIds String[] // references into the Scam Patterns FAISS store, not FKs — vector store owns those docs
+  inputText         String    // the message/scheme/offer the user asked about
+  isFlagged         Boolean
+  confidence        Float
+  scamType          String?   // e.g. "digital_arrest", "fake_kyc", "investment_doubling"
+  matchedPatternIds String[]  // references into Scam Patterns FAISS store
 
   createdAt DateTime @default(now())
 }
@@ -120,10 +193,12 @@ model SchemeMatch {
   userId    String
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  schemeName     String
-  eligible       Boolean
-  eligibilityGap String?  // if not eligible, what's missing — for Coach Agent to act on
-  sourceDocIds   String[] // references into Government Schemes FAISS store
+  schemeName      String
+  eligible        Boolean
+  annualBenefit   Decimal? // estimated monetary value of the scheme if enrolled
+  eligibilityGap  String?  // if not eligible, what's missing — for Coach Agent to act on
+  howToApply      String?  // brief instruction for Accessibility Agent to narrate
+  sourceDocIds    String[] // references into Government Schemes FAISS store
 
   createdAt DateTime @default(now())
 }
@@ -139,18 +214,20 @@ model SimulationResult {
   goalId    String?
   goal      Goal?    @relation(fields: [goalId], references: [id], onDelete: SetNull)
 
-  scenario       String   // e.g. "base", "optimistic", "pessimistic"
-  successProb    Float    // Monte Carlo output, e.g. probability of reaching goal
-  projectedValue Decimal
-  horizonMonths  Int
-  rawOutput      Json     // full simulation payload for Explainability Agent to narrate
+  scenario        String   // "status_quo" | "moderate" | "optimal"
+  successProb     Float    // Monte Carlo probability of reaching the goal (0–1)
+  projectedValue  Decimal  // median projected corpus at horizon
+  p10Value        Decimal  // 10th percentile (pessimistic outcome)
+  p90Value        Decimal  // 90th percentile (optimistic outcome)
+  horizonMonths   Int
+  rawOutput       Json     // full simulation payload for Explainability Agent
 
   createdAt DateTime @default(now())
 }
 
 
 
-// Every agent invocation — lets you show judges a clean audit trail
+// Every agent invocation — clean audit trail for judges and observability
 model AgentRun {
   id        String   @id @default(cuid())
   userId    String
@@ -158,21 +235,15 @@ model AgentRun {
   sessionId String?
   session   ConversationSession? @relation(fields: [sessionId], references: [id], onDelete: SetNull)
 
-  agentName String   // "FinancialAnalysis", "RiskAssessment", "ScamDetection",
-                      // "GovSchemeMatching", "GoalDiscovery", "FutureSimulation",
-                      // "Explainability", "Coach", "Accessibility"
+  agentName String   // "CredibilityEngine" | "FinancialAnalysis" | "RiskAssessment" |
+                      // "ScamDetection" | "GovSchemeMatching" | "GoalDiscovery" |
+                      // "FutureSimulation" | "Explainability" | "Coach" | "Accessibility"
   input     Json
   output    Json
   latencyMs Int?
   status    AgentRunStatus @default(SUCCESS)
 
   createdAt DateTime @default(now())
-}
-
-enum AgentRunStatus {
-  SUCCESS
-  FAILURE
-  PARTIAL
 }
 
 
@@ -199,10 +270,4 @@ model Message {
   role      MessageRole
   content   String   // narration text only — never raw computation, per the LLM-narrates/Python-computes rule
   createdAt DateTime @default(now())
-}
-
-enum MessageRole {
-  USER
-  ASSISTANT
-  SYSTEM
 }
