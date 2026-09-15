@@ -2,24 +2,24 @@
 name = "arthsaathi-agents"
 version = "0.1.0"
 description = "ArthSaathi — 9-Agent LangGraph Pipeline (FastAPI)"
-requires-python = ">=3.11"
+requires-python = ">=3.11,<3.13"
 dependencies = [
-    "fastapi==0.115.0",
-    "uvicorn[standard]==0.30.6",
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.30.0",
     "langgraph==0.2.69",
-    "langchain-core==0.3.0",
-    "langchain-google-genai==2.0.0",
-    "sentence-transformers==3.0.1",
-    "faiss-cpu==1.8.0",
-    "numpy==1.26.4",
-    "scipy==1.13.1",
-    "python-dotenv==1.0.1",
-    "pydantic==2.8.2",
-    "httpx==0.27.2",
+    "langchain-core>=0.3.23,<0.4.0",
+    "langchain-google-genai>=2.0.0",
+    "sentence-transformers>=2.7.0",
+    "faiss-cpu>=1.7.4",
+    "numpy>=1.26.0,<2.0.0",
+    "scipy>=1.13.0",
+    "python-dotenv>=1.0.0",
+    "pydantic>=2.8.0",
+    "httpx>=0.27.0",
 ]
 
-[tool.uv]
-dev-dependencies = [
+[dependency-groups]
+dev = [
     "pytest>=8.0.0",
     "pytest-asyncio>=0.23.0",
 ]
