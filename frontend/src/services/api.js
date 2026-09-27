@@ -2,7 +2,7 @@ import { createMockAnalysis } from '../mocks/analysisResponse'
 
 const USE_MOCK = import.meta.env.VITE_USE_MOCK !== 'false'
 const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
-const SERVER_BASE = import.meta.env.VITE_SERVER_BASE_URL || 'http://localhost:5000'
+const SERVER_BASE = import.meta.env.VITE_SERVER_BASE_URL || 'http://localhost:3001'
 
 export async function analyzeProfile(profile) {
   if (USE_MOCK) {

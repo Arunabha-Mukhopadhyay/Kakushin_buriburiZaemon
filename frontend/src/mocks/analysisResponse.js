@@ -8,6 +8,31 @@ function monthlyScenario(start, growth, drift) {
 
 export function createMockAnalysis(profile) {
   const surplus = Number(profile.monthlyIncome) - Number(profile.monthlyExpenses) - Number(profile.monthlyEmi || 0)
+  const income = Number(profile.monthlyIncome) || 0
+  const expenses = Number(profile.monthlyExpenses) || 0
+  const emi = Number(profile.monthlyEmi || 0)
+  const savings = Number(profile.existingSavings || 0)
+  const debtRatio = income > 0 ? emi / income : 0
+  const emergencyMonths = expenses > 0 ? savings / expenses : 0
+  const surplusRate = income > 0 ? surplus / income : 0
+  const employmentScore = { salaried: 100, self_employed: 75, gig: 60, farmer: 55, daily_wage: 40, unemployed: 10 }[profile.employmentType] ?? 60
+  const debtScore = Math.max(0, Math.min(100, 100 - debtRatio * 200))
+  const emergencyScore = Math.min(100, emergencyMonths / 6 * 100)
+  const surplusScore = Math.max(0, Math.min(100, surplusRate * 200))
+  const investmentScore = income > 0 ? Math.min(100, savings / (income * 3) * 100) : 0
+  const riskScore = Math.round((debtScore * .3 + emergencyScore * .25 + employmentScore * .2 + surplusScore * .15 + investmentScore * .1) * 10) / 10
+  const riskCategory = riskScore >= 70 ? 'low' : riskScore >= 40 ? 'moderate' : 'high'
+  const suspicious = typeof profile.suspiciousInput === 'string' ? profile.suspiciousInput.trim() : ''
+  const scamTerms = /otp|kyc|account.*blocked|guaranteed return|lottery|prize|processing fee|digital arrest|loan app|whatsapp/i
+  const scamFlags = suspicious && scamTerms.test(suspicious) ? [{
+    pattern: 'Potential scam indicators in submitted message',
+    source: 'demo scam-pattern check',
+    score: 0.8,
+    scam_type: /otp|kyc|blocked/i.test(suspicious) ? 'fake_kyc' : 'social_engineering',
+    confidence: 0.6,
+    evidence: suspicious,
+    warning: 'Do not share OTPs, passwords, or pay upfront fees. Verify through an official channel.',
+  }] : []
   const scenarios = {
     status_quo: { projected: 485000, start: 120000, growth: 10150 },
     moderate: { projected: 612000, start: 120000, growth: 13700 },
@@ -29,17 +54,17 @@ export function createMockAnalysis(profile) {
     credibilityFlags: [],
     financialMetrics: {
       monthly_surplus: surplus,
-      dti_ratio: Number(profile.monthlyEmi || 0) / Number(profile.monthlyIncome),
-      emergency_months: Number(profile.existingSavings || 0) / Number(profile.monthlyExpenses),
+      dti_ratio: debtRatio,
+      emergency_months: emergencyMonths,
       annual_income: Number(profile.monthlyIncome) * 12,
       income_volatility: profile.employmentType !== 'salaried',
       total_debt: Number(profile.existingDebt || 0),
       savings: Number(profile.existingSavings || 0),
     },
-    riskScore: 68.7,
-    riskCategory: 'moderate',
-    riskBreakdown: { debt_score: 60, emergency_score: 66.7, income_score: 100, surplus_score: 40, investment_score: 80 },
-    scamFlags: [],
+    riskScore,
+    riskCategory,
+    riskBreakdown: { debt_score: Math.round(debtScore * 10) / 10, emergency_score: Math.round(emergencyScore * 10) / 10, income_score: employmentScore, surplus_score: Math.round(surplusScore * 10) / 10, investment_score: Math.round(investmentScore * 10) / 10 },
+    scamFlags,
     eligibleSchemes: [
       { name: 'PM Suraksha Bima Yojana (PMSBY)', eligible: true, eligibility_status: 'eligible', annual_benefit: 200000, gap: null, how_to_apply: 'Enroll through your bank.' },
       { name: 'Atal Pension Yojana (APY)', eligible: false, eligibility_status: 'potentially_eligible', annual_benefit: 60000, gap: 'Confirm tax status and linked mobile number.', how_to_apply: null },
@@ -54,6 +79,6 @@ export function createMockAnalysis(profile) {
       { task: 'Set aside a fixed amount toward your emergency fund.', daily_amount: Math.max(0, Math.round(surplus / 30)), deadline: 'This month', scheme: null },
       { task: 'Review the PMSBY enrollment steps with your bank.', daily_amount: null, deadline: 'This week', scheme: 'PM Suraksha Bima Yojana (PMSBY)' },
     ],
-    finalResponse: 'Your profile shows a moderate financial risk level. The modeled scenarios give you a range to plan around, not a promise of what will happen.',
+    finalResponse: `Your profile shows a ${riskCategory} financial risk level. The modeled scenarios give you a range to plan around, not a promise of what will happen.`,
   }
 }
