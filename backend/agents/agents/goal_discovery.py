@@ -34,11 +34,15 @@ class Goal(TypedDict):
     priority: int
 
 
+DEFAULT_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
+
 llm = ChatGoogleGenerativeAI(
-    model="gemini-3.6-flash",
+    model=DEFAULT_MODEL,
     google_api_key=os.getenv("GOOGLE_API_KEY"),
     temperature=0.2,
+    max_retries=0,
 )
+
 
 
 PROMPT = """

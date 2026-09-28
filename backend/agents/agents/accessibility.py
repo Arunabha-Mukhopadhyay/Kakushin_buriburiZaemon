@@ -23,11 +23,15 @@ class AccessibilityResponse(BaseModel):
     text: str = Field(description="Presentation of the supplied facts without changing them")
 
 
+DEFAULT_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
+
 llm = ChatGoogleGenerativeAI(
-    model="gemini-3.6-flash",
+    model=DEFAULT_MODEL,
     google_api_key=os.getenv("GOOGLE_API_KEY"),
     temperature=0.4,
+    max_retries=0,
 )
+
 
 
 LANG_INSTRUCTIONS = {
