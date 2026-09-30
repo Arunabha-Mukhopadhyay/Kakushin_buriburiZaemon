@@ -92,6 +92,7 @@ async def analyze(payload: FinancialProfileInput):
         "profile":            payload.model_dump(),
         "user_message":       payload.userMessage or "",
         "suspicious_input":   payload.suspiciousInput,
+        "stage_latency_ms":   {},
 
         # Placeholders — filled in by agents
         "credibility_score":  0.0,
@@ -121,6 +122,7 @@ async def analyze(payload: FinancialProfileInput):
     return {
         "userId":            payload.userId,
         "latencyMs":         elapsed_ms,
+        "latencyBreakdownMs": result.get("stage_latency_ms", {}),
         "credibilityScore":  result["credibility_score"],
         "credibilityFlags":  result["credibility_flags"],
         "financialMetrics":  result["financial_metrics"],

@@ -19,6 +19,7 @@ simultaneously — total latency = slowest single agent, not sum.
 from __future__ import annotations
 
 import asyncio
+from time import perf_counter
 from langgraph.graph import StateGraph, START, END
 
 from state import ArthSaathiState
@@ -36,12 +37,23 @@ from agents.coach               import run_coach
 from agents.accessibility       import run_accessibility
 
 
+async def _timed(operation):
+    started = perf_counter()
+    result = await operation
+    return result, round((perf_counter() - started) * 1000, 2)
+
+
 
 async def credibility_node(state: ArthSaathiState) -> dict:
+    started = perf_counter()
     score, flags = compute_credibility(state["profile"])
     return {
         "credibility_score": score,
         "credibility_flags": flags,
+        "stage_latency_ms": {
+            **state.get("stage_latency_ms", {}),
+            "credibility": round((perf_counter() - started) * 1000, 2),
+        },
     }
 
 
@@ -52,17 +64,17 @@ async def parallel_layer_node(state: ArthSaathiState) -> dict:
     Total latency = max(individual agent latencies), not sum.
     """
     (
-        financial_metrics,
-        risk_result,
-        scam_flags,
-        eligible_schemes,
-        goals,
+        (financial_metrics, financial_ms),
+        (risk_result, risk_ms),
+        (scam_flags, scam_ms),
+        (eligible_schemes, schemes_ms),
+        (goals, goals_ms),
     ) = await asyncio.gather(
-        run_financial_analysis(state),
-        run_risk_assessment(state),
-        run_scam_detection(state),
-        run_scheme_matching(state),
-        run_goal_discovery(state),
+        _timed(run_financial_analysis(state)),
+        _timed(run_risk_assessment(state)),
+        _timed(run_scam_detection(state)),
+        _timed(run_scheme_matching(state)),
+        _timed(run_goal_discovery(state)),
     )
 
     return {
@@ -73,35 +85,71 @@ async def parallel_layer_node(state: ArthSaathiState) -> dict:
         "scam_flags":        scam_flags,
         "eligible_schemes":  eligible_schemes,
         "goals":             goals,
+        "stage_latency_ms": {
+            **state.get("stage_latency_ms", {}),
+            "financial_analysis": financial_ms,
+            "risk_assessment": risk_ms,
+            "scam_detection": scam_ms,
+            "scheme_matching": schemes_ms,
+            "goal_discovery": goals_ms,
+        },
     }
 
 
 # ── Node 3: Future Simulation ─────────────────────────────────────────────────
 
 async def future_simulation_node(state: ArthSaathiState) -> dict:
+    started = perf_counter()
     simulation_paths = await run_future_simulation(state)
-    return {"simulation_paths": simulation_paths}
+    return {
+        "simulation_paths": simulation_paths,
+        "stage_latency_ms": {
+            **state.get("stage_latency_ms", {}),
+            "future_simulation": round((perf_counter() - started) * 1000, 2),
+        },
+    }
 
 
 # ── Node 4: Explainability ────────────────────────────────────────────────────
 
 async def explainability_node(state: ArthSaathiState) -> dict:
+    started = perf_counter()
     decision_cards = await run_explainability(state)
-    return {"decision_cards": decision_cards}
+    return {
+        "decision_cards": decision_cards,
+        "stage_latency_ms": {
+            **state.get("stage_latency_ms", {}),
+            "explainability": round((perf_counter() - started) * 1000, 2),
+        },
+    }
 
 
 # ── Node 5: Coach ─────────────────────────────────────────────────────────────
 
 async def coach_node(state: ArthSaathiState) -> dict:
+    started = perf_counter()
     action_plan = await run_coach(state)
-    return {"action_plan": action_plan}
+    return {
+        "action_plan": action_plan,
+        "stage_latency_ms": {
+            **state.get("stage_latency_ms", {}),
+            "coach": round((perf_counter() - started) * 1000, 2),
+        },
+    }
 
 
 # ── Node 6: Accessibility ─────────────────────────────────────────────────────
 
 async def accessibility_node(state: ArthSaathiState) -> dict:
+    started = perf_counter()
     final_response = await run_accessibility(state)
-    return {"final_response": final_response}
+    return {
+        "final_response": final_response,
+        "stage_latency_ms": {
+            **state.get("stage_latency_ms", {}),
+            "accessibility": round((perf_counter() - started) * 1000, 2),
+        },
+    }
 
 
 # ── Graph assembly ────────────────────────────────────────────────────────────

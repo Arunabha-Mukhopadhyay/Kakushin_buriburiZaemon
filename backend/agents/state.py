@@ -66,6 +66,7 @@ class ArthSaathiState(TypedDict):
     profile: dict                   # FinancialProfileInput.model_dump()
     user_message: str
     suspicious_input: Optional[str]
+    stage_latency_ms: dict[str, float]
 
     credibility_score: float        # 0–100 (100 = fully credible data)
     credibility_flags: list[str]    # e.g. ["debt_exceeds_2x_annual_income"]

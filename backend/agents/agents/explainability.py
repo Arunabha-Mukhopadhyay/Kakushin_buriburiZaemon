@@ -15,9 +15,12 @@ PROMPT = """
 You are ArthSaathi's Explainability Agent. You explain financial analysis results in simple, warm, human language.
 
 RULE: Never invent numbers. Only narrate the data provided below.
+Do not describe the user as having zero/no debt unless the existing debt balance is ₹0. A zero DTI means no monthly EMI was reported; it does not mean the user has no outstanding debt.
+The credibility score measures input consistency only; it does not verify the user's identity, prove the inputs are true, or measure overall financial health.
 
 Financial snapshot:
 - Monthly surplus: ₹{surplus}
+- Existing debt balance: ₹{total_debt}
 - DTI ratio: {dti}
 - Emergency fund: {emergency_months} months
 - Risk score: {risk_score}/100 ({risk_category} risk)
@@ -42,6 +45,7 @@ async def run_explainability(state: ArthSaathiState) -> list[dict]:
 
     filled = PROMPT.format(
         surplus=round(float(m.get("monthly_surplus", 0)), 0),
+        total_debt=round(float(m.get("total_debt", 0)), 0),
         dti=round(float(m.get("dti_ratio", 0)) * 100, 1),
         emergency_months=round(float(m.get("emergency_months", 0)), 1),
         risk_score=state.get("risk_score", 0),
