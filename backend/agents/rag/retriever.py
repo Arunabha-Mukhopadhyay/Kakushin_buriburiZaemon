@@ -89,6 +89,7 @@ def query(
 
     embedding = model.encode([text], show_progress_bar=False)
     embedding = np.array(embedding, dtype="float32")
+    faiss.normalize_L2(embedding)
 
     distances, indices = index.search(embedding, top_k)
 
@@ -97,7 +98,11 @@ def query(
         if idx == -1:
             continue
         result = dict(metadata[idx])
-        result["score"] = float(dist)          # L2 distance — lower = more similar
+        # With normalized vectors: distance = 2*(1 - cos_sim), so cos_sim = 1 - distance/2
+        l2_dist = float(dist)
+        cos_sim = float(max(-1.0, min(1.0, 1.0 - (l2_dist / 2.0))))
+        result["score"] = l2_dist
+        result["cosine_similarity"] = round(cos_sim, 4)
         results.append(result)
 
     return results

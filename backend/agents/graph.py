@@ -85,6 +85,7 @@ async def parallel_layer_node(state: ArthSaathiState) -> dict:
         "scam_flags":        scam_flags,
         "eligible_schemes":  eligible_schemes,
         "goals":             goals,
+        "fallback_flags":    state.get("fallback_flags", {}),
         "stage_latency_ms": {
             **state.get("stage_latency_ms", {}),
             "financial_analysis": financial_ms,
@@ -117,6 +118,7 @@ async def explainability_node(state: ArthSaathiState) -> dict:
     decision_cards = await run_explainability(state)
     return {
         "decision_cards": decision_cards,
+        "fallback_flags": state.get("fallback_flags", {}),
         "stage_latency_ms": {
             **state.get("stage_latency_ms", {}),
             "explainability": round((perf_counter() - started) * 1000, 2),
@@ -131,6 +133,7 @@ async def coach_node(state: ArthSaathiState) -> dict:
     action_plan = await run_coach(state)
     return {
         "action_plan": action_plan,
+        "fallback_flags": state.get("fallback_flags", {}),
         "stage_latency_ms": {
             **state.get("stage_latency_ms", {}),
             "coach": round((perf_counter() - started) * 1000, 2),
@@ -145,6 +148,7 @@ async def accessibility_node(state: ArthSaathiState) -> dict:
     final_response = await run_accessibility(state)
     return {
         "final_response": final_response,
+        "fallback_flags": state.get("fallback_flags", {}),
         "stage_latency_ms": {
             **state.get("stage_latency_ms", {}),
             "accessibility": round((perf_counter() - started) * 1000, 2),

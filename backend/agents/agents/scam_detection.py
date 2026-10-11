@@ -60,8 +60,9 @@ async def run_scam_detection(state: ArthSaathiState) -> list[dict]:
 
     # --- FAISS semantic search (catches nuanced / paraphrased scams) ---
     try:
+        import asyncio
         from rag.retriever import query
-        results = query(suspicious, store="scam_patterns", top_k=3)
+        results = await asyncio.to_thread(query, suspicious, "scam_patterns", 3)
     except FileNotFoundError:
         return []
 
@@ -71,13 +72,15 @@ async def run_scam_detection(state: ArthSaathiState) -> list[dict]:
     )
 
     for r in results:
-        if r["score"] < 2.0:
+        cos_sim = r.get("cosine_similarity", max(0.0, 1.0 - r["score"] / 2.0))
+        # With normalized vectors: L2 distance < 1.4 corresponds to cosine similarity > 0.30
+        if r["score"] < 1.4 or cos_sim > 0.30:
             return [{
                 "pattern":    r["text"][:200],
                 "source":     r["source"],
                 "score":      round(r["score"], 4),
                 "scam_type":  scam_type,
-                "confidence": round(max(0, 1 - r["score"] / 2.5), 2),
+                "confidence": round(min(0.99, max(0.40, cos_sim)), 2),
                 "warning":    (
                     "This matches a known fraud pattern. "
                     "Do NOT share OTP, pay upfront fees, or click unknown links. "

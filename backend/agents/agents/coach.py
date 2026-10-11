@@ -1,12 +1,15 @@
 """Coach Agent — LLM generates a prioritised daily action plan."""
 from __future__ import annotations
-import json, os
+import json, os, logging
 from state import ArthSaathiState
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.messages import HumanMessage
 
+logger = logging.getLogger(__name__)
+
+MODEL_NAME = os.getenv("GEMINI_MODEL", "gemini-3.6-flash")
 llm = ChatGoogleGenerativeAI(
-    model="gemini-3.6-flash",
+    model=MODEL_NAME,
     google_api_key=os.getenv("GOOGLE_API_KEY"),
     temperature=0.3,
 )
@@ -60,7 +63,10 @@ async def run_coach(state: ArthSaathiState) -> list[dict]:
             if text.startswith("json"):
                 text = text[4:]
         plan = json.loads(text.strip())
+        state.setdefault("fallback_flags", {})["coach"] = False
         return plan if isinstance(plan, list) else []
-    except Exception:
+    except Exception as e:
+        logger.warning(f"[Coach] Model call failed ({e}). Using deterministic fallback.")
+        state.setdefault("fallback_flags", {})["coach"] = True
         daily = round(max(0, surplus) / 30, 0)
         return [{"task": f"Save ₹{daily} today", "daily_amount": daily, "deadline": "Daily", "scheme": None}]

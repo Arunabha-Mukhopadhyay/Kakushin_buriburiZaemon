@@ -1,12 +1,15 @@
 """Accessibility Agent — adapts final response to user's language and reading level."""
 from __future__ import annotations
-import os
+import os, logging
 from state import ArthSaathiState
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.messages import HumanMessage
 
+logger = logging.getLogger(__name__)
+
+MODEL_NAME = os.getenv("GEMINI_MODEL", "gemini-3.6-flash")
 llm = ChatGoogleGenerativeAI(
-    model="gemini-3.6-flash",
+    model=MODEL_NAME,
     google_api_key=os.getenv("GOOGLE_API_KEY"),
     temperature=0.4,
 )
@@ -64,8 +67,11 @@ async def run_accessibility(state: ArthSaathiState) -> str:
 
     try:
         response = await llm.ainvoke([HumanMessage(content=filled)])
+        state.setdefault("fallback_flags", {})["accessibility"] = False
         return response.content.strip()
-    except Exception:
+    except Exception as e:
+        logger.warning(f"[Accessibility] Model call failed ({e}). Using deterministic fallback.")
+        state.setdefault("fallback_flags", {})["accessibility"] = True
         return (
             "Namaste! Based on your profile, your top priority is building an emergency fund. "
             "Start by saving a small amount daily. You are doing the right thing by planning ahead!"

@@ -114,3 +114,6 @@ class ArthSaathiState(TypedDict):
     # [ { task: str, daily_amount: float|None, deadline: str|None, scheme: str|None } ]
 
     final_response: str             # fully formatted, language-adapted response for the user
+
+    fallback_flags: dict[str, bool] # observable fallback metadata: { "goal_discovery": bool, "explainability": bool, ... }
+

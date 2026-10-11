@@ -107,11 +107,12 @@ def build_faiss_index(
     docs: list[dict],
     model: SentenceTransformer,
 ) -> tuple[faiss.IndexFlatL2, list[dict]]:
-    """Embed documents and build a FAISS IndexFlatL2."""
+    """Embed documents, normalize to unit vectors, and build a FAISS IndexFlatL2."""
     texts = [d["text"] for d in docs]
     print(f"  Embedding {len(texts)} chunks...")
     embeddings = model.encode(texts, show_progress_bar=True, batch_size=32)
     embeddings = np.array(embeddings, dtype="float32")
+    faiss.normalize_L2(embeddings)
 
     dim   = embeddings.shape[1]
     index = faiss.IndexFlatL2(dim)

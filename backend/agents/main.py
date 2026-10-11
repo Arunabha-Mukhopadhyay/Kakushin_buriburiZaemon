@@ -108,6 +108,12 @@ async def analyze(payload: FinancialProfileInput):
         "decision_cards":     [],
         "action_plan":        [],
         "final_response":     "",
+        "fallback_flags": {
+            "goal_discovery": False,
+            "explainability": False,
+            "coach": False,
+            "accessibility": False,
+        },
     }
 
     start_time = time.perf_counter()
@@ -136,4 +142,5 @@ async def analyze(payload: FinancialProfileInput):
         "decisionCards":     result["decision_cards"],
         "actionPlan":        result["action_plan"],
         "finalResponse":     result["final_response"],
+        "fallbackFlags":     result.get("fallback_flags", {}),
     }

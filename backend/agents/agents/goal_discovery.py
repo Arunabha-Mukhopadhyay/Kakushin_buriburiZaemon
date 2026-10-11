@@ -1,12 +1,13 @@
-"""Goal Discovery Agent — LLM extracts and structures user goals from conversation."""
-from __future__ import annotations
-import json, os
+import json, os, logging
 from state import ArthSaathiState
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.messages import HumanMessage
 
+logger = logging.getLogger(__name__)
+
+MODEL_NAME = os.getenv("GEMINI_MODEL", "gemini-3.6-flash")
 llm = ChatGoogleGenerativeAI(
-    model="gemini-3.6-flash",
+    model=MODEL_NAME,
     google_api_key=os.getenv("GOOGLE_API_KEY"),
     temperature=0.2,
 )
@@ -60,8 +61,11 @@ async def run_goal_discovery(state: ArthSaathiState) -> list[dict]:
             if text.startswith("json"):
                 text = text[4:]
         goals = json.loads(text.strip())
+        state.setdefault("fallback_flags", {})["goal_discovery"] = False
         return goals if isinstance(goals, list) else []
-    except Exception:
+    except Exception as e:
+        logger.warning(f"[GoalDiscovery] Model call failed ({e}). Using deterministic fallback.")
+        state.setdefault("fallback_flags", {})["goal_discovery"] = True
         expenses = float(p.get("monthlyExpenses", 0) or 0)
         return [
             {"title": "Emergency Fund", "target_amount": round(expenses * 6), "horizon_months": 12, "priority": 1},

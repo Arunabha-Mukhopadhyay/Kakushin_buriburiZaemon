@@ -129,4 +129,25 @@ async def run_scheme_matching(state: ArthSaathiState) -> list[dict]:
             "how_to_apply": "Apply at standupmitra.in. Loan ₹10 lakh–₹1 crore for greenfield enterprise.",
         })
 
+    # ── FAISS Grounded Evidence Enrichment (Non-blocking) ───────────────────
+    try:
+        import asyncio
+        from rag.retriever import query
+        for s in schemes:
+            if s.get("eligible"):
+                query_text = f"{s['name']} eligibility how to apply"
+                results = await asyncio.to_thread(query, query_text, "government_schemes", 1)
+                if results and results[0]["score"] < 1.4:
+                    s["evidence"] = {
+                        "source": results[0]["source"],
+                        "excerpt": results[0]["text"][:250],
+                        "relevance_score": round(results[0]["cosine_similarity"], 2),
+                    }
+                else:
+                    s["evidence"] = None
+            else:
+                s["evidence"] = None
+    except Exception:
+        pass
+
     return schemes
