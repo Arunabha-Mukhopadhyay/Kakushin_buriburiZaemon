@@ -1,5 +1,5 @@
 """
-ArthSaathi — RAG Retriever
+FinMate — RAG Retriever
 
 Loads FAISS indexes from disk (once, at startup) and provides
 a simple query interface used by the Scam Detection and
@@ -32,9 +32,21 @@ VALID_STORES = {
 
 
 
-@lru_cache(maxsize=1)
+import threading
+
+os.environ["TOKENIZERS_PARALLELISM"] = "false"
+os.environ["OMP_NUM_THREADS"] = "1"
+
+_model_lock = threading.Lock()
+_global_model: SentenceTransformer | None = None
+
 def _get_model() -> SentenceTransformer:
-    return SentenceTransformer(EMBEDDING_MODEL)
+    global _global_model
+    if _global_model is None:
+        with _model_lock:
+            if _global_model is None:
+                _global_model = SentenceTransformer(EMBEDDING_MODEL)
+    return _global_model
 
 
 
@@ -87,11 +99,11 @@ def query(
     model = _get_model()
     index, metadata = _load_store(store)
 
-    embedding = model.encode([text], show_progress_bar=False)
-    embedding = np.array(embedding, dtype="float32")
-    faiss.normalize_L2(embedding)
-
-    distances, indices = index.search(embedding, top_k)
+    with _model_lock:
+        embedding = model.encode([text], show_progress_bar=False)
+        embedding = np.array(embedding, dtype="float32")
+        faiss.normalize_L2(embedding)
+        distances, indices = index.search(embedding, top_k)
 
     results = []
     for dist, idx in zip(distances[0], indices[0]):

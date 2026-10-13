@@ -1,5 +1,5 @@
 """
-ArthSaathi — RAG Ingestion Script
+FinMate — RAG Ingestion Script
 
 Run this ONCE to embed all 20 knowledge base documents
 and save 4 domain-separated FAISS indexes to disk.

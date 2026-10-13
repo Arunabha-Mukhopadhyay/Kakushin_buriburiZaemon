@@ -1,5 +1,5 @@
 """
-ArthSaathi — Credibility Validation Engine
+FinMate — Credibility Validation Engine
 
 Runs BEFORE any LangGraph agent.
 Pure Python — zero LLM involvement.

@@ -4,7 +4,7 @@ Monte Carlo Simulation — Pure NumPy, zero LLM.
 Runs 1000 iterations × 36 months across 3 trajectories:
   A) Status Quo     — no behavioural change
   B) Moderate       — small improvements
-  C) Optimal        — full ArthSaathi plan
+  C) Optimal        — full FinMate plan
 
 Features:
 - Horizon-aware goal evaluation (evaluates at goal's actual horizon rather than month 36).
@@ -112,6 +112,16 @@ def run_simulation(
         else:
             success_prob = None
 
+        monthly_data = []
+        for month_index in range(MONTHS):
+            monthly_data.append({
+                "month": month_index + 1,
+                "p10": round(float(np.percentile(monthly_savings[:, month_index], 10)), 2),
+                "median": round(float(np.percentile(monthly_savings[:, month_index], 50)), 2),
+                "p90": round(float(np.percentile(monthly_savings[:, month_index], 90)), 2),
+                "net_worth_median": round(float(np.percentile(monthly_net_worth[:, month_index], 50)), 2),
+            })
+
         return {
             "projected_value":     round(p50_savings, 2),
             "p10_value":           round(p10_savings, 2),
@@ -121,6 +131,7 @@ def run_simulation(
             "success_prob":        round(success_prob, 4) if success_prob is not None else None,
             "horizon_months":      MONTHS,
             "goal_evaluated_at":   target_check_month if goal_amount > 0 else None,
+            "monthly_data":        monthly_data,
         }
 
     return {
