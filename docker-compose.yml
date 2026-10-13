@@ -1,0 +1,42 @@
+version: "3.8"
+
+services:
+  agents:
+    build:
+      context: ./backend/agents
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      - PORT=8000
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY:-}
+      - KNOWLEDGE_BASE_PATH=../knowledge_base
+      - FAISS_INDEX_PATH=./rag/indexes
+    restart: unless-stopped
+
+  server:
+    build:
+      context: ./backend/server
+      dockerfile: Dockerfile
+    ports:
+      - "3001:3001"
+    environment:
+      - PORT=3001
+      - NODE_ENV=production
+      - AGENT_API_URL=http://agents:8000
+      - DATABASE_URL=${DATABASE_URL:-}
+      - ELEVENLABS_API_KEY=${ELEVENLABS_API_KEY:-}
+      - ELEVENLABS_AGENT_ID=${ELEVENLABS_AGENT_ID:-}
+    depends_on:
+      - agents
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "5173:80"
+    depends_on:
+      - server
+    restart: unless-stopped

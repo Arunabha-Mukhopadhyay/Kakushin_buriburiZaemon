@@ -1,4 +1,4 @@
-import { Router, Request, Response } from "express";
+import { Router, type Request, type Response } from "express";
 
 const router = Router();
 
@@ -11,6 +11,15 @@ const router = Router();
  *
  * Called by: React frontend before starting a voice conversation.
  */
+router.get("/health", (_req: Request, res: Response) => {
+  const configured = Boolean(process.env.ELEVENLABS_API_KEY && process.env.ELEVENLABS_AGENT_ID);
+  res.json({
+    status: "ok",
+    service: "FinMate Voice",
+    configured,
+  });
+});
+
 router.get("/token", async (_req: Request, res: Response) => {
   const apiKey = process.env.ELEVENLABS_API_KEY;
   const agentId = process.env.ELEVENLABS_AGENT_ID;
