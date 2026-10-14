@@ -1,5 +1,5 @@
 """
-ArthSaathi — LangGraph Orchestrator
+FinMate — LangGraph Orchestrator
 
 Wires all 10 nodes into the pipeline:
 

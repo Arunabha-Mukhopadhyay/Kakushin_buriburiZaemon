@@ -129,6 +129,9 @@ async def run_scheme_matching(state: ArthSaathiState) -> list[dict]:
             "how_to_apply": "Apply at standupmitra.in. Loan ₹10 lakh–₹1 crore for greenfield enterprise.",
         })
 
+    for scheme in schemes:
+        scheme["eligibility_status"] = "eligible" if scheme.get("eligible") else "potential"
+
     # ── FAISS Grounded Evidence Enrichment (Non-blocking) ───────────────────
     try:
         import asyncio

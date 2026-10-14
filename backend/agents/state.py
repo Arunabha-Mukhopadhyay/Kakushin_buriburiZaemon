@@ -1,5 +1,5 @@
 """
-ArthSaathi — Shared State Definition
+FinMate — Shared State Definition
 
 This TypedDict flows through the entire LangGraph pipeline.
 Every agent reads from and writes to this state.
@@ -102,7 +102,9 @@ class ArthSaathiState(TypedDict):
 
     simulation_paths: dict
     # {
-    #   status_quo:  { projected_value, success_prob, p10, p90, monthly_data: [...] }
+    #   status_quo:  { projected_value, projected_net_worth, remaining_debt,
+    #                  success_prob, p10_value, p90_value, horizon_months,
+    #                  goal_evaluated_at, monthly_data: [{ month, p10, median, p90, net_worth_median }] }
     #   moderate:    { ... }
     #   optimal:     { ... }
     # }

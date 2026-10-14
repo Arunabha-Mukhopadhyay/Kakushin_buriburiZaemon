@@ -1,4 +1,4 @@
-# ArthSaathi Knowledge Base
+# FinMate Knowledge Base
 
 Four domain-separated FAISS vector stores. Each directory maps to one dedicated FAISS index.
 **Do NOT merge these stores** — each agent queries only its relevant domain.

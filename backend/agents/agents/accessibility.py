@@ -1,18 +1,18 @@
-"""Accessibility Agent — adapts final response to user's language and reading level."""
+"""Accessibility Agent — adapts final response to user's language and reading level.
+
+Uses Groq LLM for natural language generation, with a deterministic fallback.
+"""
 from __future__ import annotations
 import os, logging
+from dotenv import load_dotenv
 from state import ArthSaathiState
-from langchain_google_genai import ChatGoogleGenerativeAI
-from langchain_core.messages import HumanMessage
+
+load_dotenv()
 
 logger = logging.getLogger(__name__)
 
-MODEL_NAME = os.getenv("GEMINI_MODEL", "gemini-3.6-flash")
-llm = ChatGoogleGenerativeAI(
-    model=MODEL_NAME,
-    google_api_key=os.getenv("GOOGLE_API_KEY"),
-    temperature=0.4,
-)
+GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
+GROQ_MODEL = os.getenv("GROQ_MODEL", "openai/gpt-oss-120b")
 
 LANG_INSTRUCTIONS = {
     "hi": "Respond in simple Hindi (Hinglish is fine). Use short sentences. Avoid formal Sanskrit words.",
@@ -21,8 +21,7 @@ LANG_INSTRUCTIONS = {
     "kn": "Respond in simple Kannada. Use everyday words.",
 }
 
-PROMPT = """
-You are ArthSaathi, a warm and trusted financial companion for everyday Indians.
+PROMPT = """You are FinMate, a warm and trusted financial companion for everyday Indians.
 
 {lang_instruction}
 
@@ -39,6 +38,14 @@ Scam alert: {scam_alert}
 
 End with one encouraging sentence.
 """
+
+
+def _inr(value) -> str:
+    try:
+        return "₹" + f"{round(float(value)):,}"
+    except (TypeError, ValueError):
+        return "Not available"
+
 
 async def run_accessibility(state: ArthSaathiState) -> str:
     p       = state["profile"]
@@ -65,14 +72,61 @@ async def run_accessibility(state: ArthSaathiState) -> str:
         scam_alert=scam_alert,
     )
 
+    # Try Groq first
+    if GROQ_API_KEY:
+        try:
+            from groq import Groq
+            client = Groq(api_key=GROQ_API_KEY)
+            candidate_models = [GROQ_MODEL, "qwen/qwen3.8-27b", "openai/gpt-oss-20b"]
+            for model in candidate_models:
+                try:
+                    response = client.chat.completions.create(
+                        model=model,
+                        messages=[
+                            {"role": "system", "content": "You are ArthSaathi, a warm financial advisor for Indians."},
+                            {"role": "user", "content": filled},
+                        ],
+                        temperature=0.5,
+                        max_tokens=300,
+                    )
+                    reply = response.choices[0].message.content
+                    if reply and reply.strip():
+                        state.setdefault("fallback_flags", {})["accessibility"] = False
+                        return reply.strip()
+                except Exception:
+                    continue
+        except Exception as e:
+            logger.warning(f"[Accessibility] Groq call failed ({e}). Trying Gemini fallback.")
+
+    # Try Gemini as second fallback
     try:
+        from langchain_google_genai import ChatGoogleGenerativeAI
+        from langchain_core.messages import HumanMessage
+
+        MODEL_NAME = os.getenv("GEMINI_MODEL", "gemini-3.6-flash")
+        llm = ChatGoogleGenerativeAI(
+            model=MODEL_NAME,
+            google_api_key=os.getenv("GOOGLE_API_KEY"),
+            temperature=0.4,
+        )
         response = await llm.ainvoke([HumanMessage(content=filled)])
         state.setdefault("fallback_flags", {})["accessibility"] = False
         return response.content.strip()
     except Exception as e:
-        logger.warning(f"[Accessibility] Model call failed ({e}). Using deterministic fallback.")
-        state.setdefault("fallback_flags", {})["accessibility"] = True
-        return (
-            "Namaste! Based on your profile, your top priority is building an emergency fund. "
-            "Start by saving a small amount daily. You are doing the right thing by planning ahead!"
-        )
+        logger.warning(f"[Accessibility] Gemini call also failed ({e}). Using deterministic fallback.")
+
+    # Deterministic fallback with actual user data
+    state.setdefault("fallback_flags", {})["accessibility"] = True
+    surplus = round(float(m.get("monthly_surplus", 0)))
+    runway = round(float(m.get("emergency_months", 0)), 1)
+    risk_cat = state.get("risk_category", "unknown")
+    risk_sc = state.get("risk_score", 0)
+
+    return (
+        f"Based on your financial profile, you have a monthly surplus of {_inr(surplus)} "
+        f"and your emergency runway covers {runway} months of expenses. "
+        f"Your financial health score is {risk_sc}/100 ({risk_cat} risk). "
+        f"Your top priority should be: {top_card.lower()}. "
+        f"{'You are eligible for: ' + ', '.join(schemes[:2]) + '. ' if schemes else ''}"
+        f"Start with {top_action.lower()} — every small step counts toward financial security!"
+    )

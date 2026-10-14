@@ -1,12 +1,13 @@
 """
-ArthSaathi — FastAPI Entry Point
+FinMate — FastAPI Entry Point
 
 Endpoints:
   GET  /              → health check
   POST /analyze       → run the full 9-agent LangGraph pipeline
+  POST /chat          → grounded follow-up answers from a completed analysis
   GET  /health/rag    → verify FAISS indexes are loaded
 
-Called by Express backend (POST /api/agents/analyze → proxy to here).
+Express proxies these under /api/agents (POST /api/agents/analyze, POST /api/agents/chat).
 """
 
 from __future__ import annotations
@@ -17,6 +18,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
+from pydantic import BaseModel, Field
 
 from state import FinancialProfileInput, ArthSaathiState
 from rag.retriever import preload_all_stores
@@ -28,18 +30,18 @@ load_dotenv()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    print("\nArthSaathi Agent Service starting...")
+    print("\nFinMate Agent Service starting...")
     print("Loading FAISS indexes into memory...")
     preload_all_stores()
     print("All indexes loaded. Ready to serve.\n")
     yield
-    print("ArthSaathi Agent Service shutting down.")
+    print("FinMate Agent Service shutting down.")
 
 
 # ── App ───────────────────────────────────────────────────────────────────────
 
 app = FastAPI(
-    title="ArthSaathi Agent API",
+    title="FinMate Agent API",
     description="9-agent LangGraph pipeline for financial analysis, risk scoring, scam detection, scheme matching, simulation, and coaching.",
     version="1.0.0",
     lifespan=lifespan,
@@ -57,7 +59,7 @@ app.add_middleware(
 
 @app.get("/")
 async def health():
-    return {"status": "ok", "service": "ArthSaathi Agent API"}
+    return {"status": "ok", "service": "FinMate Agent API"}
 
 
 @app.get("/health/rag")
@@ -144,3 +146,24 @@ async def analyze(payload: FinancialProfileInput):
         "finalResponse":     result["final_response"],
         "fallbackFlags":     result.get("fallback_flags", {}),
     }
+
+
+class ChatInput(BaseModel):
+    message: str = Field(..., min_length=1)
+    profile: dict = Field(default_factory=dict)
+    analysis: dict = Field(default_factory=dict)
+    history: list = Field(default_factory=list)
+
+
+@app.post("/chat")
+async def chat(payload: ChatInput):
+    """Answer a follow-up using the analysis the client already has."""
+    from agents.chat import build_chat_reply
+
+    reply = build_chat_reply(
+        payload.message,
+        profile=payload.profile,
+        analysis=payload.analysis,
+        history=payload.history,
+    )
+    return {"reply": reply}
