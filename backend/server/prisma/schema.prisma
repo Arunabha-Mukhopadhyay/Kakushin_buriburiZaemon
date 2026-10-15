@@ -1,4 +1,4 @@
-// ArthSaathi — Prisma schema
+// FinMate — Prisma schema
 // Postgres backs all structured/relational state.
 // FAISS (separate, file-based) continues to handle RAG/semantic search —
 // no overlap: this DB never stores embeddings or vector indices.
