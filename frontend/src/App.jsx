@@ -127,6 +127,7 @@ const GOAL_PRESETS = [
    ═══════════════════════════════════════════════════════════════════════════════ */
 function App() {
   const [screen, setScreen] = useState('welcome')
+  const [focusView, setFocusView] = useState('overview')
   const [profile, setProfile] = useState(initialProfile)
   const [analysis, setAnalysis] = useState(null)
   const [error, setError] = useState('')
@@ -253,7 +254,10 @@ function App() {
 
       {screen === 'welcome' && (
         <Welcome
-          onStart={() => setScreen('onboarding')}
+          onStart={(focus = 'overview') => {
+            setFocusView(focus)
+            setScreen('onboarding')
+          }}
           mockActive={mockActive}
           backendOnline={backendStatus.online}
         />
@@ -262,6 +266,7 @@ function App() {
         <Onboarding
           profile={profile}
           update={update}
+          focusView={focusView}
           onBack={() => setScreen('welcome')}
           onSubmit={submitProfile}
           error={error}
@@ -280,10 +285,12 @@ function App() {
           analysis={analysis}
           profile={profile}
           mockActive={mockActive}
+          initialFocus={focusView}
           onVoice={() => setScreen('voice')}
           onNew={() => {
             setProfile(initialProfile)
             setAnalysis(null)
+            setFocusView('overview')
             setScreen('onboarding')
           }}
         />
@@ -317,33 +324,48 @@ function Welcome({ onStart, mockActive, backendOnline }) {
           smart scheme matching, and 36-month future projections.
         </p>
 
-        {/* Feature Cards — visual instead of text */}
+        {/* Interactive Feature Cards — select a specific pillar or explore all */}
         <div className="welcome-features">
-          <div className="feature-card">
+          <button
+            type="button"
+            className="feature-card feature-card-btn"
+            onClick={() => onStart('risk')}
+            title="Focus specifically on Risk Scoring & AI Pipeline"
+          >
             <div className="feature-icon"><ShieldCheck size={20} /></div>
             <div>
               <b>Risk Analysis</b>
-              <span>9-agent AI pipeline</span>
+              <span>9-agent AI pipeline &rarr;</span>
             </div>
-          </div>
-          <div className="feature-card">
+          </button>
+          <button
+            type="button"
+            className="feature-card feature-card-btn"
+            onClick={() => onStart('schemes')}
+            title="Focus specifically on Government Welfare Schemes"
+          >
             <div className="feature-icon feature-icon--gold"><Landmark size={20} /></div>
             <div>
               <b>Scheme Matching</b>
-              <span>50+ govt schemes</span>
+              <span>50+ govt schemes &rarr;</span>
             </div>
-          </div>
-          <div className="feature-card">
+          </button>
+          <button
+            type="button"
+            className="feature-card feature-card-btn"
+            onClick={() => onStart('simulation')}
+            title="Focus specifically on Monte Carlo Simulation"
+          >
             <div className="feature-icon feature-icon--teal"><TrendingUp size={20} /></div>
             <div>
               <b>Future Simulation</b>
-              <span>1,000 Monte Carlo paths</span>
+              <span>1,000 Monte Carlo paths &rarr;</span>
             </div>
-          </div>
+          </button>
         </div>
 
-        <button className="primary-button hero-button" onClick={onStart}>
-          Start your free analysis <ArrowRight size={18} />
+        <button className="primary-button hero-button" onClick={() => onStart('overview')}>
+          Start complete analysis <ArrowRight size={18} />
         </button>
         <div className="trust-line">
           <ShieldCheck size={14} /> No sign-up required · 100% private
@@ -390,6 +412,7 @@ function Welcome({ onStart, mockActive, backendOnline }) {
 function Onboarding({
   profile,
   update,
+  focusView = 'overview',
   onBack,
   onSubmit,
   error,
@@ -451,7 +474,12 @@ function Onboarding({
         <button className="back-button" onClick={onBack}>
           <ChevronLeft size={18} /> Back
         </button>
-        <div className="eyebrow">Your starting point</div>
+        <div className="eyebrow">
+          {focusView === 'risk' && 'Selected Focus: Risk Analysis'}
+          {focusView === 'schemes' && 'Selected Focus: Scheme Matching'}
+          {focusView === 'simulation' && 'Selected Focus: Future Simulation'}
+          {(!focusView || focusView === 'overview') && 'Your starting point'}
+        </div>
         <h1>
           Let's put your money
           <br />
@@ -848,8 +876,8 @@ function Loading({ mockActive }) {
 /* ═══════════════════════════════════════════════════════════════════════════════
    DASHBOARD — Unified layout, single chatbot, no duplicate voice buttons
    ═══════════════════════════════════════════════════════════════════════════════ */
-function Dashboard({ analysis, profile, mockActive, onVoice, onNew }) {
-  const [activeView, setActiveView] = useState('overview')
+function Dashboard({ analysis, profile, mockActive, initialFocus = 'overview', onVoice, onNew }) {
+  const [activeView, setActiveView] = useState(initialFocus || 'overview')
   const m = analysis.financialMetrics || {}
   const riskScore = analysis.riskScore ?? 0
   const riskCat = (analysis.riskCategory || 'unknown').toLowerCase()
@@ -862,7 +890,25 @@ function Dashboard({ analysis, profile, mockActive, onVoice, onNew }) {
           className={activeView === 'overview' ? 'side-link active' : 'side-link'}
           onClick={() => setActiveView('overview')}
         >
-          <BarChart3 size={16} /> Overview
+          <BarChart3 size={16} /> All Insights
+        </button>
+        <button
+          className={activeView === 'risk' ? 'side-link active' : 'side-link'}
+          onClick={() => setActiveView('risk')}
+        >
+          <ShieldCheck size={16} /> Risk Analysis
+        </button>
+        <button
+          className={activeView === 'schemes' ? 'side-link active' : 'side-link'}
+          onClick={() => setActiveView('schemes')}
+        >
+          <Landmark size={16} /> Scheme Matching
+        </button>
+        <button
+          className={activeView === 'simulation' ? 'side-link active' : 'side-link'}
+          onClick={() => setActiveView('simulation')}
+        >
+          <TrendingUp size={16} /> Future Simulation
         </button>
         <button
           className="side-link"
@@ -881,15 +927,59 @@ function Dashboard({ analysis, profile, mockActive, onVoice, onNew }) {
       </aside>
 
       <div className="dashboard-main">
+        {/* Quick Filter Pill Switcher */}
+        <div className="view-filter-bar">
+          <span className="view-filter-label">Filter View:</span>
+          <button
+            type="button"
+            className={`view-pill ${activeView === 'overview' ? 'active' : ''}`}
+            onClick={() => setActiveView('overview')}
+          >
+            <BarChart3 size={13} /> All Data
+          </button>
+          <button
+            type="button"
+            className={`view-pill ${activeView === 'risk' ? 'active' : ''}`}
+            onClick={() => setActiveView('risk')}
+          >
+            <ShieldCheck size={13} /> Risk Analysis Only
+          </button>
+          <button
+            type="button"
+            className={`view-pill ${activeView === 'schemes' ? 'active' : ''}`}
+            onClick={() => setActiveView('schemes')}
+          >
+            <Landmark size={13} /> Scheme Matching Only
+          </button>
+          <button
+            type="button"
+            className={`view-pill ${activeView === 'simulation' ? 'active' : ''}`}
+            onClick={() => setActiveView('simulation')}
+          >
+            <TrendingUp size={13} /> Future Simulation Only
+          </button>
+        </div>
+
         {/* Hero Summary Card */}
         <div className="dash-hero">
           <div className="dash-hero-left">
-            <div className="eyebrow">Your financial picture</div>
+            <div className="eyebrow">
+              {activeView === 'risk' && 'Focused Pipeline: Risk & Vulnerability'}
+              {activeView === 'schemes' && 'Focused Pipeline: Welfare & Scheme Matching'}
+              {activeView === 'simulation' && 'Focused Pipeline: 36-Month Monte Carlo Simulation'}
+              {activeView === 'overview' && 'Your financial picture'}
+            </div>
             <h1>
-              Analysis <em>complete.</em>
+              {activeView === 'risk' && <>Risk <em>Profile.</em></>}
+              {activeView === 'schemes' && <>Eligible <em>Schemes.</em></>}
+              {activeView === 'simulation' && <>Future <em>Projections.</em></>}
+              {activeView === 'overview' && <>Analysis <em>complete.</em></>}
             </h1>
             <p>
-              9 AI agents analyzed your profile in {analysis?.latencyMs ? `${analysis.latencyMs}ms` : 'real time'}.
+              {activeView === 'risk' && 'Comprehensive 9-agent risk factor assessment, debt sustainability, and scam vulnerability.'}
+              {activeView === 'schemes' && 'Verified central and state government schemes matched to your income, occupation, and demographics.'}
+              {activeView === 'simulation' && '1,000 Monte Carlo paths forecasting savings growth, inflation risk, and financial goal horizons.'}
+              {activeView === 'overview' && `9 AI agents analyzed your profile in ${analysis?.latencyMs ? `${analysis.latencyMs}ms` : 'real time'}.`}
             </p>
           </div>
           <div className="dash-hero-stats">
@@ -917,10 +1007,12 @@ function Dashboard({ analysis, profile, mockActive, onVoice, onNew }) {
         </div>
 
         {/* Credibility engine score and flags */}
-        <Credibility data={analysis} />
+        {(activeView === 'overview' || activeView === 'risk') && (
+          <Credibility data={analysis} />
+        )}
 
         {/* Accessibility narrative generated by Accessibility Agent */}
-        {analysis.finalResponse && (
+        {analysis.finalResponse && (activeView === 'overview' || activeView === 'risk') && (
           <div className="narrative-box">
             <div className="section-kicker" style={{ marginBottom: '8px' }}>
               <Sparkles size={14} style={{ marginRight: '6px' }} />
@@ -931,14 +1023,28 @@ function Dashboard({ analysis, profile, mockActive, onVoice, onNew }) {
         )}
 
         <div className="dashboard-grid">
-          <Overview data={analysis} profile={profile} />
-          <Risk data={analysis} />
-          <Simulation data={analysis} />
-          <Scams data={analysis} />
-          <Schemes data={analysis} />
-          <Goals data={analysis} />
-          <Narrative data={analysis} />
-          <Actions data={analysis} />
+          {(activeView === 'overview' || activeView === 'risk') && (
+            <>
+              <Overview data={analysis} profile={profile} />
+              <Risk data={analysis} />
+              <Scams data={analysis} />
+              <Narrative data={analysis} />
+            </>
+          )}
+
+          {(activeView === 'overview' || activeView === 'schemes') && (
+            <>
+              <Schemes data={analysis} />
+              <Actions data={analysis} />
+            </>
+          )}
+
+          {(activeView === 'overview' || activeView === 'simulation') && (
+            <>
+              <Simulation data={analysis} />
+              <Goals data={analysis} />
+            </>
+          )}
         </div>
       </div>
 
