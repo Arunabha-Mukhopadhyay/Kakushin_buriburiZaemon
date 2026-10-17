@@ -1,7 +1,16 @@
 import { createMockAnalysis } from '../mocks/analysisResponse'
 
-const ENV_API_BASE = import.meta.env.VITE_API_BASE_URL
-const ENV_SERVER_BASE = import.meta.env.VITE_SERVER_BASE_URL
+function formatUrl(url) {
+  if (!url) return ''
+  const trimmed = url.trim().replace(/\/$/, '')
+  if (!trimmed.startsWith('http://') && !trimmed.startsWith('https://')) {
+    return `https://${trimmed}`
+  }
+  return trimmed
+}
+
+const ENV_API_BASE = formatUrl(import.meta.env.VITE_API_BASE_URL)
+const ENV_SERVER_BASE = formatUrl(import.meta.env.VITE_SERVER_BASE_URL)
 
 const DEFAULT_API_BASE = ENV_API_BASE || 'http://localhost:8000'
 const DEFAULT_SERVER_BASE = ENV_SERVER_BASE || 'http://localhost:3001'
