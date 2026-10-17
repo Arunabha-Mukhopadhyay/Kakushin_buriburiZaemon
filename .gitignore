@@ -15,10 +15,9 @@ dist/
 build/
 .cache/
 
-# Indexes & data
-backend/agents/rag/indexes/
-*.faiss
-*.pkl
+# Indexes & data (tracked for zero-latency cloud deployments)
+!backend/agents/rag/indexes/*.pkl
+!backend/agents/rag/indexes/*.faiss
 
 # Logs & temp
 *.log

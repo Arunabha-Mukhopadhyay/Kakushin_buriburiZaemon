@@ -59,7 +59,7 @@ def _get_model():
 _index_cache: dict[str, tuple[faiss.IndexFlatL2, list[dict]]] = {}
 
 
-def _load_store(store_name: str) -> tuple[faiss.IndexFlatL2, list[dict]]:
+def _load_store(store_name: str) -> tuple[faiss.IndexFlatL2 | None, list[dict]]:
     """Load a FAISS index + metadata from disk (cached after first load)."""
     if store_name in _index_cache:
         return _index_cache[store_name]
@@ -67,15 +67,20 @@ def _load_store(store_name: str) -> tuple[faiss.IndexFlatL2, list[dict]]:
     index_file = INDEX_PATH / f"{store_name}.faiss"
     meta_file  = INDEX_PATH / f"{store_name}.pkl"
 
-    if not index_file.exists():
-        raise FileNotFoundError(
-            f"FAISS index not found: {index_file}\n"
-            "Run: python -m rag.ingest"
-        )
+    metadata = []
+    if meta_file.exists():
+        try:
+            with open(meta_file, "rb") as f:
+                metadata = pickle.load(f)
+        except Exception as e:
+            print(f"Warning: could not read {meta_file}: {e}")
 
-    index = faiss.read_index(str(index_file))
-    with open(meta_file, "rb") as f:
-        metadata = pickle.load(f)
+    index = None
+    if index_file.exists():
+        try:
+            index = faiss.read_index(str(index_file))
+        except Exception as e:
+            print(f"Warning: could not read {index_file}: {e}")
 
     _index_cache[store_name] = (index, metadata)
     return index, metadata
