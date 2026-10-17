@@ -1,7 +1,7 @@
 import { createMockAnalysis } from '../mocks/analysisResponse'
 
 function formatUrl(url) {
-  if (!url) return ''
+  if (!url || url === 'undefined' || url === 'null') return ''
   const trimmed = url.trim().replace(/\/$/, '')
   if (!trimmed.startsWith('http://') && !trimmed.startsWith('https://')) {
     return `https://${trimmed}`
@@ -9,28 +9,41 @@ function formatUrl(url) {
   return trimmed
 }
 
+const isBrowser = typeof window !== 'undefined'
+const isLocalhost = isBrowser && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+const isHttps = isBrowser && window.location.protocol === 'https:'
+
 const ENV_API_BASE = formatUrl(import.meta.env.VITE_API_BASE_URL)
 const ENV_SERVER_BASE = formatUrl(import.meta.env.VITE_SERVER_BASE_URL)
 
-const DEFAULT_API_BASE = ENV_API_BASE || 'http://localhost:8000'
-const DEFAULT_SERVER_BASE = ENV_SERVER_BASE || 'http://localhost:3001'
+// Automatically use the live Render agents service if on production without custom env var
+const PRODUCTION_AGENT_API = 'https://finmate-agents.onrender.com'
+const DEFAULT_API_BASE = ENV_API_BASE || (isLocalhost ? 'http://localhost:8000' : PRODUCTION_AGENT_API)
+const DEFAULT_SERVER_BASE = ENV_SERVER_BASE || (isLocalhost ? 'http://localhost:3001' : 'https://finmate-server.onrender.com')
 
-// Candidate endpoints to handle localhost vs 127.0.0.1 vs Vite proxy
-const AGENT_API_CANDIDATES = [
-  DEFAULT_API_BASE,
-  'http://127.0.0.1:8000',
-  '/api/agents',
-  'http://localhost:3001/api/agents',
-  'http://127.0.0.1:3001/api/agents',
-]
+// When running on HTTPS, never call insecure http:// to prevent browser mixed content blocks
+const AGENT_API_CANDIDATES = Array.from(
+  new Set(
+    [
+      DEFAULT_API_BASE,
+      PRODUCTION_AGENT_API,
+      isLocalhost ? 'http://127.0.0.1:8000' : null,
+      '/api/agents',
+      isLocalhost ? 'http://localhost:3001/api/agents' : null,
+      isLocalhost ? 'http://127.0.0.1:3001/api/agents' : null,
+    ].filter((url) => Boolean(url) && (!isHttps || url.startsWith('https://') || url.startsWith('/')))
+  )
+)
 
-const VOICE_SERVER_CANDIDATES = [
-  DEFAULT_SERVER_BASE,
-  'http://127.0.0.1:3001',
-  'http://localhost:5000',
-  'http://127.0.0.1:5000',
-  '/api/voice',
-]
+const VOICE_SERVER_CANDIDATES = Array.from(
+  new Set(
+    [
+      DEFAULT_SERVER_BASE,
+      isLocalhost ? 'http://127.0.0.1:3001' : null,
+      '/api/voice',
+    ].filter((url) => Boolean(url) && (!isHttps || url.startsWith('https://') || url.startsWith('/')))
+  )
+)
 
 /**
  * Check if mock mode is currently enabled.
@@ -157,6 +170,9 @@ export async function analyzeProfile(profile, options = {}) {
       const isNetworkError =
         err.name === 'AbortError' ||
         err.name === 'TypeError' ||
+        err.name === 'SyntaxError' ||
+        err.name === 'SecurityError' ||
+        err.message?.includes('pattern') ||
         err.message?.includes('fetch') ||
         err.message?.includes('NetworkError') ||
         err.message?.includes('Failed to fetch')
