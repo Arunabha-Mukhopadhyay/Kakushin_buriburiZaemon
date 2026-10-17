@@ -15,7 +15,7 @@ load_dotenv()
 logger = logging.getLogger(__name__)
 
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
-GROQ_MODEL = os.getenv("GROQ_CHAT_MODEL", "openai/gpt-oss-120b")
+GROQ_MODEL = os.getenv("GROQ_CHAT_MODEL", "qwen/qwen3.8-27b")
 
 
 def _num(value, default=0.0) -> float:
@@ -179,18 +179,19 @@ def _groq_chat(message: str, context: str, history: list) -> str | None:
         # Add the current question
         messages.append({"role": "user", "content": message})
 
-        candidate_models = [GROQ_MODEL, "qwen/qwen3.8-27b", "openai/gpt-oss-20b"]
+        candidate_models = ["qwen/qwen3.8-27b", GROQ_MODEL, "openai/gpt-oss-120b"]
         last_error = None
         for model in candidate_models:
             try:
                 response = client.chat.completions.create(
                     model=model,
                     messages=messages,
-                    temperature=0.5,
-                    max_tokens=600,
+                    temperature=0.6,
+                    max_tokens=800,
                     top_p=0.9,
                 )
-                reply = response.choices[0].message.content
+                msg_obj = response.choices[0].message
+                reply = msg_obj.content or getattr(msg_obj, "reasoning", "")
                 if reply and reply.strip():
                     return reply.strip()
             except Exception as ex:
@@ -207,7 +208,7 @@ def _groq_chat(message: str, context: str, history: list) -> str | None:
 
 
 def _deterministic_fallback(question: str, profile: dict, analysis: dict) -> str:
-    """Regex-based fallback when Groq is unavailable."""
+    """Empathetic, human-readable guidance when external LLM is offline."""
     import re
     metrics = analysis.get("financialMetrics") or analysis.get("financial_metrics") or {}
     income = _num(profile.get("monthlyIncome"))
@@ -229,54 +230,86 @@ def _deterministic_fallback(question: str, profile: dict, analysis: dict) -> str
         safe_emi = round(surplus * 0.4)
         if surplus > 0:
             return (
-                f"With your monthly surplus of **{_inr(surplus)}**, you can safely take on a new EMI "
-                f"of up to **{_inr(safe_emi)}** (40% of surplus). Your current DTI is {(dti*100):.1f}%. "
-                f"Emergency runway: {runway:.1f} months."
+                f"Looking closely at your cash flow, you currently have a healthy monthly surplus of **{_inr(surplus)}**.\n\n"
+                f"As a prudent rule of thumb, keeping any new EMI to a maximum of 40% of your surplus (**{_inr(safe_emi)}/month**) "
+                f"protects you against unexpected pinches. Your current Debt-to-Income (DTI) ratio is **{(dti*100):.1f}%** "
+                f"with an emergency buffer of **{runway:.1f} months**. As long as your purchase stays within this range, you're in safe waters!"
             )
-        return f"Your surplus is **{_inr(surplus)}** — taking on new debt would be risky right now."
+        return (
+            f"Looking at your current monthly cash flow, your essential living expenses and existing commitments take up all your income (surplus: {_inr(surplus)}).\n\n"
+            "Taking on an extra EMI right now would stretch your budget dangerously thin. I strongly suggest holding off on large new commitments until we trim discretionary spending or pay down current loans."
+        )
 
     if re.search(r"risk|score|health|why.*\d", q):
         return (
-            f"Your financial health score is **{risk_score}/100** ({risk_category} risk). "
-            f"Key factors: DTI at {(dti*100):.1f}%, emergency runway {runway:.1f} months, "
-            f"debt of {_inr(debt)}. Improving any of these will raise your score."
+            f"Your current financial health score is **{risk_score}/100**, placing you in the **{risk_category} risk tier**.\n\n"
+            f"Here is what shapes your rating right now:\n"
+            f"• **Debt-to-Income Ratio:** {(dti*100):.1f}% of your monthly earnings goes to debt servicing ({'Comfortable' if dti < 0.35 else 'Higher than ideal'})\n"
+            f"• **Emergency Runway:** You have {runway:.1f} months of expenses saved ({'Solid foundation' if runway >= 3 else 'Building this to 3–6 months will quickly boost your score'})\n"
+            f"• **Total Debt Load:** {_inr(debt)}\n\n"
+            "Every rupee redirected toward paying down debt or growing your emergency reserve will directly improve this score."
         )
 
     if re.search(r"invest|surplus|mutual fund|sip|save|stocks|ppf|fd|allocation", q):
         if surplus <= 0:
-            return "Build a surplus first before investing. Cut non-essential expenses."
+            return (
+                "Before jumping into new investments, the most urgent step is carving out a positive monthly buffer. "
+                "Let's look at reducing flexible expenses so you can free up even ₹2,000–₹3,000 a month to get started safely."
+            )
+        growth_sip = round(surplus * 0.50)
+        safe_buffer = round(surplus * 0.30)
+        liquid_reserve = round(surplus * 0.20)
         return (
-            f"With **{_inr(surplus)}/month** surplus: allocate ~20% to liquid savings, "
-            f"~30% to PPF/NPS for tax-free returns, and ~50% to index fund SIPs for long-term growth."
+            f"With your consistent monthly surplus of **{_inr(surplus)}**, you are in a great position to build lasting wealth! "
+            f"Here is a balanced, practical allocation tailored to everyday goals:\n\n"
+            f"• **Long-Term Growth (50% — {_inr(growth_sip)}/month):** Start a monthly Systematic Investment Plan (SIP) in a low-cost broad market index fund (like Nifty 50 or Flexi-Cap) to beat inflation over 5+ years.\n"
+            f"• **Guaranteed Stability (30% — {_inr(safe_buffer)}/month):** Direct this toward Public Provident Fund (PPF) or a high-grade recurring deposit for risk-free, predictable compounding.\n"
+            f"• **Liquid Emergency Shield (20% — {_inr(liquid_reserve)}/month):** Keep this in a high-interest savings account or liquid fund until you accumulate at least 6 months of living expenses ({_inr(expenses * 6)}).\n\n"
+            "Would you like me to tailor these numbers for a specific timeline, like buying a home or retirement?"
         )
 
     if re.search(r"emergency|runway|buffer|contingency", q):
         target = expenses * 6
-        gap = target - savings
+        gap = max(0, target - savings)
+        months_to_target = max(1, round(gap / max(1, surplus * 0.4))) if surplus > 0 else "N/A"
         return (
-            f"You have **{runway:.1f} months** of runway ({_inr(savings)} saved). "
-            f"Target: 6 months = {_inr(target)}. Gap: {_inr(max(0, gap))}."
+            f"Your current emergency runway is **{runway:.1f} months** ({_inr(savings)} in liquid savings against {_inr(expenses)} in monthly expenses).\n\n"
+            f"For peace of mind, a standard 6-month safety reserve for you is **{_inr(target)}** (leaving a gap of **{_inr(gap)}**). "
+            + (f"By dedicating just 40% of your monthly surplus ({_inr(round(surplus * 0.4))}) to this goal, you will have your full safety cushion ready in approximately **{months_to_target} months**!" if surplus > 0 else "Focusing on building this cushion should be your first priority.")
         )
 
     if re.search(r"scheme|government|pmsby|pmjjby|pmay|apy|nps", q):
         if not schemes:
-            return "Consider PMSBY (₹20/yr accident cover) and PMJJBY (₹436/yr life cover) as a starting point."
-        names = [s.get("name", "") for s in schemes[:5]]
-        return f"You're matched with: {', '.join(names)}. Ask me about any specific scheme for details."
+            return (
+                "You haven't matched with specific niche schemes yet, but two essential government programs apply to almost every Indian citizen:\n\n"
+                "1. **PM Suraksha Bima Yojana (PMSBY):** ₹2 lakh accidental coverage for just ₹20/year.\n"
+                "2. **PM Jeevan Jyoti Bima Yojana (PMJJBY):** ₹2 lakh term life coverage for ₹436/year.\n\n"
+                "Both can be activated directly through your bank account."
+            )
+        names = [s.get("name", "") for s in schemes[:4]]
+        return (
+            f"Based on your profile, you are eligible for high-impact welfare programs including: **{', '.join(names)}**.\n\n"
+            "Each of these provides subsidized protection or direct financial assistance. Feel free to ask me for exact eligibility criteria or step-by-step application guidance for any of them!"
+        )
 
     if re.search(r"debt|dti|ratio|credit|owe", q):
         return (
-            f"Total debt: **{_inr(debt)}**, monthly EMI: **{_inr(emi)}**, "
-            f"DTI: **{(dti*100):.1f}%**. {'Safe range.' if dti < 0.35 else 'Consider reducing debt.'}"
+            f"Here is your current debt profile:\n\n"
+            f"• **Total Outstanding Debt:** {_inr(debt)}\n"
+            f"• **Monthly EMI Commitments:** {_inr(emi)}\n"
+            f"• **Debt-to-Income (DTI) Ratio:** {(dti*100):.1f}%\n\n"
+            + ("Your debt load is well within a safe threshold (below 35% of income)." if dti < 0.35 else "Your debt-to-income is somewhat high. Prioritize clearing high-interest obligations first.")
         )
 
     optimal = (paths.get("optimal") or {}).get("projected_value")
     return (
-        f"Your snapshot: Income {_inr(income)}/mo, expenses {_inr(expenses)}/mo, "
-        f"surplus **{_inr(surplus)}**. Health score: {risk_score}/100. "
-        f"Emergency runway: {runway:.1f} months. "
-        + (f"Projected savings (optimal): {_inr(optimal)}. " if optimal else "")
-        + "Ask me anything specific — affordability, investments, schemes, or goals!"
+        f"Here is your quick financial summary:\n\n"
+        f"• Monthly Income: {_inr(income)} | Living Expenses: {_inr(expenses)}\n"
+        f"• Monthly Net Surplus: **{_inr(surplus)}**\n"
+        f"• Financial Health Score: **{risk_score}/100** ({risk_category})\n"
+        f"• Emergency Buffer: {runway:.1f} months\n"
+        + (f"• Projected 36-Month Savings (Optimized): **{_inr(optimal)}**\n\n" if optimal else "\n")
+        + "What would you like to explore next? I can help you evaluate a large purchase, plan investments, or optimize debt payments."
     )
 
 

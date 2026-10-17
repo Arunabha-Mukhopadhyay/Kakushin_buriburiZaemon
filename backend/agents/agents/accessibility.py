@@ -12,7 +12,7 @@ load_dotenv()
 logger = logging.getLogger(__name__)
 
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
-GROQ_MODEL = os.getenv("GROQ_MODEL", "openai/gpt-oss-120b")
+GROQ_MODEL = os.getenv("GROQ_MODEL", "qwen/qwen3.8-27b")
 
 LANG_INSTRUCTIONS = {
     "hi": "Respond in simple Hindi (Hinglish is fine). Use short sentences. Avoid formal Sanskrit words.",
@@ -77,19 +77,20 @@ async def run_accessibility(state: ArthSaathiState) -> str:
         try:
             from groq import Groq
             client = Groq(api_key=GROQ_API_KEY)
-            candidate_models = [GROQ_MODEL, "qwen/qwen3.8-27b", "openai/gpt-oss-20b"]
+            candidate_models = ["qwen/qwen3.8-27b", GROQ_MODEL, "openai/gpt-oss-120b"]
             for model in candidate_models:
                 try:
                     response = client.chat.completions.create(
                         model=model,
                         messages=[
-                            {"role": "system", "content": "You are ArthSaathi, a warm financial advisor for Indians."},
+                            {"role": "system", "content": "You are FinMate, a warm financial advisor for Indians."},
                             {"role": "user", "content": filled},
                         ],
                         temperature=0.5,
-                        max_tokens=300,
+                        max_tokens=600,
                     )
-                    reply = response.choices[0].message.content
+                    msg_obj = response.choices[0].message
+                    reply = msg_obj.content or getattr(msg_obj, "reasoning", "")
                     if reply and reply.strip():
                         state.setdefault("fallback_flags", {})["accessibility"] = False
                         return reply.strip()

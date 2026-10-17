@@ -8,7 +8,7 @@ load_dotenv()
 logger = logging.getLogger(__name__)
 
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
-GROQ_MODEL = os.getenv("GROQ_MODEL", "openai/gpt-oss-120b")
+GROQ_MODEL = os.getenv("GROQ_MODEL", "qwen/qwen3.8-27b")
 
 PROMPT = """
 You are FinMate's Behavioral Coach. Convert financial recommendations into a concrete, achievable action plan.
@@ -69,7 +69,7 @@ async def run_coach(state: ArthSaathiState) -> list[dict]:
         try:
             from groq import Groq
             client = Groq(api_key=GROQ_API_KEY)
-            candidate_models = [GROQ_MODEL, "qwen/qwen3.8-27b", "openai/gpt-oss-20b"]
+            candidate_models = ["qwen/qwen3.8-27b", GROQ_MODEL, "openai/gpt-oss-20b"]
             for model in candidate_models:
                 try:
                     response = client.chat.completions.create(
@@ -79,9 +79,10 @@ async def run_coach(state: ArthSaathiState) -> list[dict]:
                             {"role": "user", "content": filled},
                         ],
                         temperature=0.3,
-                        max_tokens=500,
+                        max_tokens=600,
                     )
-                    content = response.choices[0].message.content or ""
+                    msg_obj = response.choices[0].message
+                    content = msg_obj.content or getattr(msg_obj, "reasoning", "") or ""
                     plan = json.loads(_clean_json(content))
                     if isinstance(plan, list) and len(plan) > 0:
                         state.setdefault("fallback_flags", {})["coach"] = False
