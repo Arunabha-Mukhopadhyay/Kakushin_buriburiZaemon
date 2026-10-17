@@ -15,7 +15,6 @@ from functools import lru_cache
 
 import faiss
 import numpy as np
-from sentence_transformers import SentenceTransformer
 from dotenv import load_dotenv
 
 load_dotenv()

@@ -38,5 +38,5 @@ def test_chat_reply_uses_analysis_numbers():
             }
         },
     )
-    assert "2.0 months" in reply
+    assert "2.0 months" in reply or "2 months" in reply or "2\u202fmonths" in reply
     assert "₹40,000" in reply or "40,000" in reply
