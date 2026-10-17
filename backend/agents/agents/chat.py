@@ -14,8 +14,10 @@ load_dotenv()
 
 logger = logging.getLogger(__name__)
 
-GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
-GROQ_MODEL = os.getenv("GROQ_CHAT_MODEL", "qwen/qwen3.8-27b")
+from config import get_groq_api_key, get_groq_chat_model
+
+GROQ_API_KEY = get_groq_api_key()
+GROQ_MODEL = get_groq_chat_model()
 
 
 def _num(value, default=0.0) -> float:
@@ -158,12 +160,13 @@ If they ask "can I afford X?", calculate using their actual surplus.
 
 def _groq_chat(message: str, context: str, history: list) -> str | None:
     """Call Groq API for a semantically aware response."""
-    if not GROQ_API_KEY:
+    key = get_groq_api_key()
+    if not key:
         return None
 
     try:
         from groq import Groq
-        client = Groq(api_key=GROQ_API_KEY)
+        client = Groq(api_key=key)
 
         messages = [
             {"role": "system", "content": SYSTEM_PROMPT},
@@ -196,6 +199,7 @@ def _groq_chat(message: str, context: str, history: list) -> str | None:
                     return reply.strip()
             except Exception as ex:
                 last_error = ex
+                logger.warning(f"[Chat] Groq model {model} error: {ex}")
                 continue
 
         if last_error:

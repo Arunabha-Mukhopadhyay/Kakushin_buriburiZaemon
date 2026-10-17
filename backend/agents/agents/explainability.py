@@ -7,8 +7,10 @@ from state import ArthSaathiState
 load_dotenv()
 logger = logging.getLogger(__name__)
 
-GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
-GROQ_MODEL = os.getenv("GROQ_MODEL", "qwen/qwen3.8-27b")
+from config import get_groq_api_key, get_groq_model
+
+GROQ_API_KEY = get_groq_api_key()
+GROQ_MODEL = get_groq_model()
 
 PROMPT = """
 You are FinMate's Explainability Agent. You explain financial analysis results in simple, warm, human language.
@@ -67,10 +69,11 @@ async def run_explainability(state: ArthSaathiState) -> list[dict]:
     )
 
     # 1. Try Groq first
-    if GROQ_API_KEY:
+    key = get_groq_api_key()
+    if key:
         try:
             from groq import Groq
-            client = Groq(api_key=GROQ_API_KEY)
+            client = Groq(api_key=key)
             candidate_models = ["qwen/qwen3.8-27b", GROQ_MODEL, "openai/gpt-oss-20b"]
             for model in candidate_models:
                 try:

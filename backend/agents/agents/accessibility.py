@@ -11,8 +11,10 @@ load_dotenv()
 
 logger = logging.getLogger(__name__)
 
-GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
-GROQ_MODEL = os.getenv("GROQ_MODEL", "qwen/qwen3.8-27b")
+from config import get_groq_api_key, get_groq_model
+
+GROQ_API_KEY = get_groq_api_key()
+GROQ_MODEL = get_groq_model()
 
 LANG_INSTRUCTIONS = {
     "hi": "Respond in simple Hindi (Hinglish is fine). Use short sentences. Avoid formal Sanskrit words.",
@@ -73,10 +75,11 @@ async def run_accessibility(state: ArthSaathiState) -> str:
     )
 
     # Try Groq first
-    if GROQ_API_KEY:
+    key = get_groq_api_key()
+    if key:
         try:
             from groq import Groq
-            client = Groq(api_key=GROQ_API_KEY)
+            client = Groq(api_key=key)
             candidate_models = ["qwen/qwen3.8-27b", GROQ_MODEL, "openai/gpt-oss-120b"]
             for model in candidate_models:
                 try:

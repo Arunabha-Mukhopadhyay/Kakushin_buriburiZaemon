@@ -59,7 +59,12 @@ app.add_middleware(
 
 @app.api_route("/", methods=["GET", "HEAD"])
 async def health():
-    return {"status": "ok", "service": "FinMate Agent API"}
+    from config import get_groq_api_key
+    return {
+        "status": "ok",
+        "service": "FinMate Agent API",
+        "groq_configured": bool(get_groq_api_key()),
+    }
 
 
 @app.get("/health/rag")
