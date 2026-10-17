@@ -9,6 +9,6 @@ import "dotenv/config"; // must be imported before process.env is read
 export default defineConfig({
   schema: path.join("prisma", "schema.prisma"),
   datasource: {
-    url: process.env.DATABASE_URL as string,
+    url: (process.env.DATABASE_URL || "postgresql://dummy:dummy@localhost:5432/finmate") as string,
   },
 });

@@ -2,7 +2,14 @@ import { Router, type Request, type Response } from "express";
 
 const router = Router();
 
-const AGENT_BASE = (process.env.AGENT_API_URL || "http://127.0.0.1:8000").replace(/\/$/, "");
+const getAgentBase = () => {
+  let base = (process.env.AGENT_API_URL || "http://127.0.0.1:8000").trim().replace(/\/$/, "");
+  if (!base.startsWith("http://") && !base.startsWith("https://")) {
+    base = `https://${base}`;
+  }
+  return base;
+};
+const AGENT_BASE = getAgentBase();
 
 router.use(async (req: Request, res: Response) => {
   const suffix = req.originalUrl.replace(/^\/api\/agents/, "") || "/";
