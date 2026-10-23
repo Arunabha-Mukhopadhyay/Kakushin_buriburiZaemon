@@ -9,6 +9,7 @@ import {
   ChevronLeft,
   CircleDollarSign,
   DollarSign,
+  Globe,
   GraduationCap,
   Heart,
   Home,
@@ -49,9 +50,24 @@ import {
   setMockMode,
 } from './services/api'
 import { money, percent, titleCase } from './utils/format'
+import {
+  LANGUAGES,
+  DEFAULT_LANGUAGE,
+  getLanguageConfig,
+  detectScriptLanguage,
+  t,
+  DICTIONARY,
+  getLocalizedRiskCategory,
+  getLocalizedScenarioName,
+  getLocalizedAssessment,
+  getLocalizedScheme,
+  getLocalizedAction,
+  getLocalizedGoalTitle,
+  getLocalizedDecisionCard,
+} from './utils/i18n'
 
 /* ─── Web Speech TTS Helpers ─────────────────────────────────────────────────── */
-function speakText(text, onEnd) {
+function speakText(text, onEnd, lang = 'en') {
   if (typeof window === 'undefined' || !window.speechSynthesis) return false
   window.speechSynthesis.cancel()
   const clean = text
@@ -63,10 +79,27 @@ function speakText(text, onEnd) {
     .replace(/\n+/g, '. ')
     .trim()
   if (!clean) return false
+  const targetLang = detectScriptLanguage(clean) || lang || 'en'
+  const langConfig = getLanguageConfig(targetLang)
   const utterance = new SpeechSynthesisUtterance(clean)
-  utterance.lang = 'en-IN'
+  utterance.lang = langConfig.ttsLocale || 'en-IN'
   utterance.rate = 1.0
   utterance.pitch = 1.0
+
+  try {
+    const voices = window.speechSynthesis.getVoices() || []
+    const prefix = targetLang.toLowerCase()
+    const matchingVoice = voices.find(
+      (v) =>
+        v.lang &&
+        (v.lang.toLowerCase().startsWith(prefix) ||
+          v.lang.toLowerCase().replace('_', '-').startsWith(langConfig.ttsLocale.toLowerCase()))
+    )
+    if (matchingVoice) {
+      utterance.voice = matchingVoice
+    }
+  } catch {}
+
   if (onEnd) utterance.onend = onEnd
   utterance.onerror = () => { if (onEnd) onEnd() }
   window.speechSynthesis.speak(utterance)
@@ -135,6 +168,35 @@ function App() {
   const [backendStatus, setBackendStatus] = useState({ online: false, checking: true })
   const [voiceStatus, setVoiceStatus] = useState({ online: false, configured: false, checking: true })
 
+  // Multilingual State
+  const [currentLang, setCurrentLang] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('finmate_lang') || DEFAULT_LANGUAGE
+    }
+    return DEFAULT_LANGUAGE
+  })
+  const [langMenuOpen, setLangMenuOpen] = useState(false)
+  const langDropdownRef = useRef(null)
+
+  useEffect(() => {
+    function handleClickOutside(event) {
+      if (langDropdownRef.current && !langDropdownRef.current.contains(event.target)) {
+        setLangMenuOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
+
+  function changeLanguage(newLang) {
+    setCurrentLang(newLang)
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('finmate_lang', newLang)
+    }
+    setProfile((prev) => ({ ...prev, preferredLang: newLang }))
+    setLangMenuOpen(false)
+  }
+
   // Probe backend on mount and periodically
   useEffect(() => {
     let mounted = true
@@ -195,7 +257,7 @@ function App() {
       hasInsurance: Boolean(profile.hasInsurance),
       hasHealthInsurance: Boolean(profile.hasHealthInsurance),
       riskAppetite: profile.riskAppetite || 'moderate',
-      preferredLang: profile.preferredLang || 'en',
+      preferredLang: currentLang || profile.preferredLang || 'en',
       suspiciousInput: profile.suspiciousInput ? profile.suspiciousInput.trim() : null,
       userMessage: profile.userMessage ? profile.userMessage.trim() : null,
     }
@@ -232,12 +294,42 @@ function App() {
             >
               <span className="conn-dot" />
               {backendStatus.checking
-                ? 'Connecting…'
+                ? t(currentLang, 'connecting', 'Connecting…')
                 : backendStatus.online
-                ? 'Agents live'
-                : 'Agents offline'}
+                ? t(currentLang, 'agentsLive', 'Agents live')
+                : t(currentLang, 'agentsOffline', 'Agents offline')}
             </span>
           )}
+
+          {/* Multilingual Selector Dropdown */}
+          <div className="lang-dropdown-container" ref={langDropdownRef}>
+            <button
+              type="button"
+              className="lang-select-btn"
+              onClick={() => setLangMenuOpen((prev) => !prev)}
+              aria-label={t(currentLang, 'selectLanguage', 'Select Language')}
+              title="Change Language / भाषा निवडा / भाषा चुनें / ভাষা নির্বাচন / ਭਾਸ਼ਾ ਚੁਣੋ"
+            >
+              <Globe size={14} />
+              <span>{getLanguageConfig(currentLang).native}</span>
+            </button>
+            {langMenuOpen && (
+              <div className="lang-menu">
+                {LANGUAGES.map((item) => (
+                  <button
+                    key={item.code}
+                    type="button"
+                    className={`lang-menu-item ${currentLang === item.code ? 'active' : ''}`}
+                    onClick={() => changeLanguage(item.code)}
+                  >
+                    <span className="lang-native">{item.native}</span>
+                    <span className="lang-label">({item.label})</span>
+                    {currentLang === item.code && <Check size={14} className="lang-check" />}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
 
           {/* Mode Switcher */}
           <button
@@ -247,7 +339,7 @@ function App() {
             title={mockActive ? 'Switch to Live FastAPI Backend' : 'Switch to Demo Mock Mode'}
           >
             <Radio size={12} />
-            <span>{mockActive ? 'Demo mode' : 'Live analysis'}</span>
+            <span>{mockActive ? t(currentLang, 'demoMode', 'Demo mode') : t(currentLang, 'liveAnalysis', 'Live analysis')}</span>
           </button>
         </div>
       </header>
@@ -260,6 +352,7 @@ function App() {
           }}
           mockActive={mockActive}
           backendOnline={backendStatus.online}
+          currentLang={currentLang}
         />
       )}
       {screen === 'onboarding' && (
@@ -272,6 +365,7 @@ function App() {
           error={error}
           mockActive={mockActive}
           backendOnline={backendStatus.online}
+          currentLang={currentLang}
           onSwitchToMock={() => {
             setMockMode(true)
             setMockActive(true)
@@ -279,13 +373,14 @@ function App() {
           }}
         />
       )}
-      {screen === 'loading' && <Loading mockActive={mockActive} />}
+      {screen === 'loading' && <Loading mockActive={mockActive} currentLang={currentLang} />}
       {screen === 'dashboard' && (
         <Dashboard
           analysis={analysis}
           profile={profile}
           mockActive={mockActive}
           initialFocus={focusView}
+          currentLang={currentLang}
           onVoice={() => setScreen('voice')}
           onNew={() => {
             setProfile(initialProfile)
@@ -299,8 +394,14 @@ function App() {
         <Voice
           analysis={analysis}
           profile={profile}
+          currentLang={currentLang}
           onBack={() => setScreen(analysis ? 'dashboard' : 'welcome')}
         />
+      )}
+
+      {/* Persistent Multilingual Chatbot */}
+      {screen !== 'voice' && (
+        <Chatbot analysis={analysis} profile={profile} currentLang={currentLang} />
       )}
     </div>
   )
@@ -309,19 +410,26 @@ function App() {
 /* ═══════════════════════════════════════════════════════════════════════════════
    WELCOME
    ═══════════════════════════════════════════════════════════════════════════════ */
-function Welcome({ onStart, mockActive, backendOnline }) {
+function Welcome({ onStart, mockActive, backendOnline, currentLang = 'en' }) {
   return (
     <main className="welcome page-enter">
       <div className="welcome-copy">
         <div className="eyebrow">
-          <span className="eyebrow-dot" /> AI-Powered Financial Companion
+          <span className="eyebrow-dot" /> {t(currentLang, 'welcomeBadge', 'AI-Powered Financial Companion')}
         </div>
         <h1>
-          Your money, <em>decoded.</em>
+          {currentLang === 'hi' ? <>आपका धन, <em>स्पष्ट और सुरक्षित।</em></>
+           : currentLang === 'mr' ? <>तुमचा पैसा, <em>स्पष्ट आणि सुरक्षित।</em></>
+           : currentLang === 'bn' ? <>আপনার অর্থ, <em>স্পষ্ট ও নির্ভুল।</em></>
+           : currentLang === 'pa' ? <>ਤੁਹਾਡਾ ਪੈਸਾ, <em>ਸਪੱਸ਼ਟ ਅਤੇ ਸੁਰੱਖਿਅਤ।</em></>
+           : <>Your money, <em>decoded.</em></>}
         </h1>
         <p className="hero-text">
-          Get a complete financial health check in under 30 seconds — risk scoring,
-          smart scheme matching, and 36-month future projections.
+          {t(
+            currentLang,
+            'welcomeSubheading',
+            'Get a complete financial health check in under 30 seconds — risk scoring, smart scheme matching, and 36-month future projections.'
+          )}
         </p>
 
         {/* Interactive Feature Cards — select a specific pillar or explore all */}
@@ -334,7 +442,7 @@ function Welcome({ onStart, mockActive, backendOnline }) {
           >
             <div className="feature-icon"><ShieldCheck size={20} /></div>
             <div>
-              <b>Risk Analysis</b>
+              <b>{t(currentLang, 'tabRisk', 'Risk Analysis')}</b>
               <span>9-agent AI pipeline &rarr;</span>
             </div>
           </button>
@@ -346,7 +454,7 @@ function Welcome({ onStart, mockActive, backendOnline }) {
           >
             <div className="feature-icon feature-icon--gold"><Landmark size={20} /></div>
             <div>
-              <b>Scheme Matching</b>
+              <b>{t(currentLang, 'tabSchemes', 'Scheme Matching')}</b>
               <span>50+ govt schemes &rarr;</span>
             </div>
           </button>
@@ -358,20 +466,20 @@ function Welcome({ onStart, mockActive, backendOnline }) {
           >
             <div className="feature-icon feature-icon--teal"><TrendingUp size={20} /></div>
             <div>
-              <b>Future Simulation</b>
+              <b>{t(currentLang, 'tabSimulation', 'Future Simulation')}</b>
               <span>1,000 Monte Carlo paths &rarr;</span>
             </div>
           </button>
         </div>
 
         <button className="primary-button hero-button" onClick={() => onStart('overview')}>
-          Start complete analysis <ArrowRight size={18} />
+          {t(currentLang, 'startOverview', 'Start complete analysis')} <ArrowRight size={18} />
         </button>
         <div className="trust-line">
           <ShieldCheck size={14} /> No sign-up required · 100% private
           {!mockActive && backendOnline && (
             <span style={{ color: 'var(--teal)', marginLeft: '10px' }}>
-              · Agents online
+              · {t(currentLang, 'agentsLive', 'Agents online')}
             </span>
           )}
         </div>
@@ -419,6 +527,7 @@ function Onboarding({
   mockActive,
   backendOnline,
   onSwitchToMock,
+  currentLang = 'en',
 }) {
   const [step, setStep] = useState(1)
   const [selectedGoals, setSelectedGoals] = useState([])
@@ -472,43 +581,45 @@ function Onboarding({
     <main className="onboarding page-enter">
       <div className="form-intro">
         <button className="back-button" onClick={onBack}>
-          <ChevronLeft size={18} /> Back
+          <ChevronLeft size={18} /> {t(currentLang, 'prevStep', 'Back')}
         </button>
         <div className="eyebrow">
           {focusView === 'risk' && 'Selected Focus: Risk Analysis'}
           {focusView === 'schemes' && 'Selected Focus: Scheme Matching'}
           {focusView === 'simulation' && 'Selected Focus: Future Simulation'}
-          {(!focusView || focusView === 'overview') && 'Your starting point'}
+          {(!focusView || focusView === 'overview') && (t(currentLang, 'formTitle', 'Your starting point'))}
         </div>
         <h1>
-          Let's put your money
-          <br />
-          <em>in context.</em>
+          {currentLang === 'hi' ? <>आइए आपके वित्तीय स्थिति को <br /><em>स्पष्ट रूप से समझें।</em></>
+           : currentLang === 'mr' ? <>चला, तुमचे पैसे <br /><em>योग्य संदर्भात पाहूया.</em></>
+           : currentLang === 'bn' ? <>আসুন আপনার অর্থ <br /><em>সঠিকভাবে পর্যালোচনা করি।</em></>
+           : currentLang === 'pa' ? <>ਆਓ ਤੁਹਾਡੇ ਪੈਸੇ ਨੂੰ <br /><em>ਸਹੀ ਢੰਗ ਨਾਲ ਸਮਝੀਏ।</em></>
+           : <>Let's put your money<br /><em>in context.</em></>}
         </h1>
-        <p>A few honest numbers are enough to begin. You can leave optional details blank.</p>
+        <p>{t(currentLang, 'formSubtitle', 'A few honest numbers are enough to begin. You can leave optional details blank.')}</p>
       </div>
       <div className="form-panel">
         <div className="stepper">
           <span className={step >= 1 ? 'active' : ''}>
-            01 <b>Snapshot</b>
+            01 <b>{t(currentLang, 'stepFinancials', 'Snapshot')}</b>
           </span>
           <i />
           <span className={step >= 2 ? 'active' : ''}>
-            02 <b>Context</b>
+            02 <b>{t(currentLang, 'stepDemographics', 'Context')}</b>
           </span>
           <i />
           <span className={step >= 3 ? 'active' : ''}>
-            03 <b>Goals</b>
+            03 <b>{t(currentLang, 'stepGoals', 'Goals')}</b>
           </span>
         </div>
         <form onSubmit={(e) => { e.preventDefault(); handleSubmit(e) }}>
           {step === 1 && (
             <section className="form-step">
-              <div className="section-kicker">The essentials</div>
-              <h2>What does your month look like?</h2>
+              <div className="section-kicker">01 / 03</div>
+              <h2>{t(currentLang, 'formTitle', 'What does your month look like?')}</h2>
               <div className="field-grid">
                 <Field
-                  label="Monthly income"
+                  label={t(currentLang, 'monthlyIncome', 'Monthly income')}
                   name="monthlyIncome"
                   value={profile.monthlyIncome}
                   update={update}
@@ -516,7 +627,7 @@ function Onboarding({
                   prefix="₹"
                 />
                 <Field
-                  label="Monthly expenses"
+                  label={t(currentLang, 'monthlyExpenses', 'Monthly expenses')}
                   name="monthlyExpenses"
                   value={profile.monthlyExpenses}
                   update={update}
@@ -524,28 +635,28 @@ function Onboarding({
                   prefix="₹"
                 />
                 <Field
-                  label="Monthly EMI / debt payments"
+                  label={t(currentLang, 'monthlyEmi', 'Monthly EMI / debt payments')}
                   name="monthlyEmi"
                   value={profile.monthlyEmi}
                   update={update}
                   prefix="₹"
                 />
                 <Field
-                  label="Current savings"
+                  label={t(currentLang, 'existingSavings', 'Current savings')}
                   name="existingSavings"
                   value={profile.existingSavings}
                   update={update}
                   prefix="₹"
                 />
                 <Field
-                  label="Existing debt"
+                  label={t(currentLang, 'existingDebt', 'Existing debt')}
                   name="existingDebt"
                   value={profile.existingDebt}
                   update={update}
                   prefix="₹"
                 />
                 <Field
-                  label="People financially dependent on you"
+                  label={t(currentLang, 'dependents', 'People financially dependent on you')}
                   name="dependents"
                   value={profile.dependents}
                   update={update}
@@ -602,15 +713,17 @@ function Onboarding({
                   ]}
                 />
                 <SelectField
-                  label="Preferred language"
+                  label={t(currentLang, 'selectLanguage', 'Preferred language')}
                   name="preferredLang"
                   value={profile.preferredLang}
                   update={update}
                   options={[
                     ['en', 'English'],
-                    ['hi', 'Hindi / Hinglish'],
-                    ['mr', 'Marathi'],
-                    ['kn', 'Kannada'],
+                    ['hi', 'हिंदी (Hindi)'],
+                    ['mr', 'मराठी (Marathi)'],
+                    ['bn', 'বাংলা (Bengali)'],
+                    ['pa', 'ਪੰਜਾਬੀ (Punjabi)'],
+                    ['kn', 'ಕನ್ನಡ (Kannada)'],
                   ]}
                 />
                 <Field label="State" name="state" value={profile.state} update={update} type="text" />
@@ -775,16 +888,16 @@ function Onboarding({
                 className="secondary-button"
                 onClick={() => setStep((value) => value - 1)}
               >
-                Back
+                {t(currentLang, 'prevStep', 'Back')}
               </button>
             )}
             {step < 3 ? (
               <button type="button" className="primary-button" onClick={next}>
-                Continue <ArrowRight size={17} />
+                {t(currentLang, 'nextStep', 'Continue')} <ArrowRight size={17} />
               </button>
             ) : (
               <button type="submit" className="primary-button">
-                Analyze my picture <ArrowRight size={17} />
+                {t(currentLang, 'submitAnalyze', 'Analyze my picture')} <ArrowRight size={17} />
               </button>
             )}
           </div>
@@ -848,22 +961,20 @@ function Toggle({ label, value, onChange }) {
 /* ═══════════════════════════════════════════════════════════════════════════════
    LOADING
    ═══════════════════════════════════════════════════════════════════════════════ */
-function Loading({ mockActive }) {
+function Loading({ mockActive, currentLang = 'en' }) {
   return (
     <main className="loading page-enter">
       <div className="loader-mark">
         <LoaderCircle size={42} />
       </div>
-      <div className="eyebrow">Working through your picture</div>
+      <div className="eyebrow">{t(currentLang, 'connecting', 'Working through your picture')}</div>
       <h1>
-        Finding the useful
-        <br />
-        <em>signal.</em>
+        {t(currentLang, 'loadingTitle', 'Finding the useful signal.')}
       </h1>
       <p>
         {mockActive
-          ? 'Generating simulated profile analysis…'
-          : 'Running credibility checks, parallel agents, Monte Carlo simulation, and language adaptation…'}
+          ? t(currentLang, 'demoMode', 'Generating simulated profile analysis…')
+          : t(currentLang, 'loadingSubtitle', 'Running credibility checks, parallel agents, Monte Carlo simulation, and language adaptation…')}
       </p>
       <div className="loading-track">
         <span />
@@ -876,7 +987,15 @@ function Loading({ mockActive }) {
 /* ═══════════════════════════════════════════════════════════════════════════════
    DASHBOARD — Unified layout, single chatbot, no duplicate voice buttons
    ═══════════════════════════════════════════════════════════════════════════════ */
-function Dashboard({ analysis, profile, mockActive, initialFocus = 'overview', onVoice, onNew }) {
+function Dashboard({
+  analysis,
+  profile,
+  mockActive,
+  initialFocus = 'overview',
+  onVoice,
+  onNew,
+  currentLang = 'en',
+}) {
   const [activeView, setActiveView] = useState(initialFocus || 'overview')
   const m = analysis.financialMetrics || {}
   const riskScore = analysis.riskScore ?? 0
@@ -890,38 +1009,38 @@ function Dashboard({ analysis, profile, mockActive, initialFocus = 'overview', o
           className={activeView === 'overview' ? 'side-link active' : 'side-link'}
           onClick={() => setActiveView('overview')}
         >
-          <BarChart3 size={16} /> All Insights
+          <BarChart3 size={16} /> {t(currentLang, 'tabOverview', 'All Insights')}
         </button>
         <button
           className={activeView === 'risk' ? 'side-link active' : 'side-link'}
           onClick={() => setActiveView('risk')}
         >
-          <ShieldCheck size={16} /> Risk Analysis
+          <ShieldCheck size={16} /> {t(currentLang, 'tabRisk', 'Risk Analysis')}
         </button>
         <button
           className={activeView === 'schemes' ? 'side-link active' : 'side-link'}
           onClick={() => setActiveView('schemes')}
         >
-          <Landmark size={16} /> Scheme Matching
+          <Landmark size={16} /> {t(currentLang, 'tabSchemes', 'Scheme Matching')}
         </button>
         <button
           className={activeView === 'simulation' ? 'side-link active' : 'side-link'}
           onClick={() => setActiveView('simulation')}
         >
-          <TrendingUp size={16} /> Future Simulation
+          <TrendingUp size={16} /> {t(currentLang, 'tabSimulation', 'Future Simulation')}
         </button>
         <button
           className="side-link"
           onClick={onVoice}
         >
-          <Mic size={16} /> Voice Assistant
+          <Mic size={16} /> {t(currentLang, 'talkWithVoice', 'Voice Assistant')}
         </button>
         <div className="sidebar-bottom">
           <div className="mode-pill">
-            <span className="live-dot" /> {mockActive ? 'Demo mode' : 'Live agent analysis'}
+            <span className="live-dot" /> {mockActive ? t(currentLang, 'demoMode', 'Demo mode') : t(currentLang, 'liveAnalysis', 'Live agent analysis')}
           </div>
           <button className="new-analysis" onClick={onNew}>
-            Start new analysis <ArrowRight size={14} />
+            {t(currentLang, 'startNew', 'Start new analysis')} <ArrowRight size={14} />
           </button>
         </div>
       </aside>
@@ -935,28 +1054,28 @@ function Dashboard({ analysis, profile, mockActive, initialFocus = 'overview', o
             className={`view-pill ${activeView === 'overview' ? 'active' : ''}`}
             onClick={() => setActiveView('overview')}
           >
-            <BarChart3 size={13} /> All Data
+            <BarChart3 size={13} /> {t(currentLang, 'tabOverview', 'All Data')}
           </button>
           <button
             type="button"
             className={`view-pill ${activeView === 'risk' ? 'active' : ''}`}
             onClick={() => setActiveView('risk')}
           >
-            <ShieldCheck size={13} /> Risk Analysis Only
+            <ShieldCheck size={13} /> {t(currentLang, 'tabRisk', 'Risk Analysis Only')}
           </button>
           <button
             type="button"
             className={`view-pill ${activeView === 'schemes' ? 'active' : ''}`}
             onClick={() => setActiveView('schemes')}
           >
-            <Landmark size={13} /> Scheme Matching Only
+            <Landmark size={13} /> {t(currentLang, 'tabSchemes', 'Scheme Matching Only')}
           </button>
           <button
             type="button"
             className={`view-pill ${activeView === 'simulation' ? 'active' : ''}`}
             onClick={() => setActiveView('simulation')}
           >
-            <TrendingUp size={13} /> Future Simulation Only
+            <TrendingUp size={13} /> {t(currentLang, 'tabSimulation', 'Future Simulation Only')}
           </button>
         </div>
 
@@ -987,28 +1106,28 @@ function Dashboard({ analysis, profile, mockActive, initialFocus = 'overview', o
               <div className={`hero-stat-ring ${riskCat === 'low' ? 'good' : riskCat === 'high' ? 'danger' : 'moderate'}`}>
                 <strong>{riskScore}</strong>
               </div>
-              <span>Health Score</span>
+              <span>{t(currentLang, 'metricHealth', 'Health Score')} ({getLocalizedRiskCategory(riskCat, currentLang)})</span>
             </div>
             <div className="hero-stat">
               <strong className="hero-stat-value">{money(m.monthly_surplus)}</strong>
-              <span>Monthly Surplus</span>
+              <span>{t(currentLang, 'metricSurplus', 'Monthly Surplus')}</span>
             </div>
             <div className="hero-stat">
               <strong className="hero-stat-value">
                 {m.emergency_months != null ? `${Number(m.emergency_months).toFixed(1)} mo` : '—'}
               </strong>
-              <span>Emergency Runway</span>
+              <span>{t(currentLang, 'metricRunway', 'Emergency Runway')}</span>
             </div>
             <div className="hero-stat">
               <strong className="hero-stat-value">{percent(m.dti_ratio)}</strong>
-              <span>Debt-to-Income</span>
+              <span>{t(currentLang, 'metricDti', 'Debt-to-Income')}</span>
             </div>
           </div>
         </div>
 
         {/* Credibility engine score and flags */}
         {(activeView === 'overview' || activeView === 'risk') && (
-          <Credibility data={analysis} />
+          <Credibility data={analysis} currentLang={currentLang} />
         )}
 
         {/* Accessibility narrative generated by Accessibility Agent */}
@@ -1016,39 +1135,37 @@ function Dashboard({ analysis, profile, mockActive, initialFocus = 'overview', o
           <div className="narrative-box">
             <div className="section-kicker" style={{ marginBottom: '8px' }}>
               <Sparkles size={14} style={{ marginRight: '6px' }} />
-              FinMate's Personalized Assessment
+              {t(currentLang, 'assessmentTitle', "FinMate's Personalized Assessment")}
             </div>
-            <p>{analysis.finalResponse}</p>
+            <p>{getLocalizedAssessment(analysis, currentLang)}</p>
           </div>
         )}
 
         <div className="dashboard-grid">
           {(activeView === 'overview' || activeView === 'risk') && (
             <>
-              <Overview data={analysis} profile={profile} />
-              <Risk data={analysis} />
-              <Scams data={analysis} />
-              <Narrative data={analysis} />
+              <Overview data={analysis} profile={profile} currentLang={currentLang} />
+              <Risk data={analysis} currentLang={currentLang} />
+              <Scams data={analysis} currentLang={currentLang} />
+              <Narrative data={analysis} currentLang={currentLang} />
             </>
           )}
 
           {(activeView === 'overview' || activeView === 'schemes') && (
             <>
-              <Schemes data={analysis} />
-              <Actions data={analysis} />
+              <Schemes data={analysis} currentLang={currentLang} />
+              <Actions data={analysis} currentLang={currentLang} />
             </>
           )}
 
           {(activeView === 'overview' || activeView === 'simulation') && (
             <>
-              <Simulation data={analysis} />
-              <Goals data={analysis} />
+              <Simulation data={analysis} currentLang={currentLang} />
+              <Goals data={analysis} currentLang={currentLang} />
             </>
           )}
         </div>
       </div>
-
-      <Chatbot analysis={analysis} profile={profile} />
     </main>
   )
 }
@@ -1056,7 +1173,7 @@ function Dashboard({ analysis, profile, mockActive, initialFocus = 'overview', o
 /* ═══════════════════════════════════════════════════════════════════════════════
    DATA SECTIONS
    ═══════════════════════════════════════════════════════════════════════════════ */
-function Credibility({ data }) {
+function Credibility({ data, currentLang = 'en' }) {
   const score = data.credibilityScore ?? 100
   const flags = data.credibilityFlags || []
   const isHigh = score >= 80
@@ -1066,11 +1183,11 @@ function Credibility({ data }) {
       <div className="credibility-left">
         <ShieldCheck size={18} color={isHigh ? 'var(--teal)' : 'var(--gold)'} />
         <div>
-          <b>Data Credibility Check: </b>
+          <b>{t(currentLang, 'credibilityCheck', 'Data Credibility Check: ')}</b>
           <span>
             {isHigh
-              ? 'Input metrics look consistent and plausible.'
-              : 'Potential inconsistencies detected in input data.'}
+              ? t(currentLang, 'credibilityPlausible', 'Input metrics look consistent and plausible.')
+              : t(currentLang, 'credibilityWarning', 'Potential inconsistencies detected in input data.')}
           </span>
         </div>
       </div>
@@ -1090,31 +1207,41 @@ function Credibility({ data }) {
   )
 }
 
-function Overview({ data, profile }) {
+function Overview({ data, profile, currentLang = 'en' }) {
   const m = data.financialMetrics || {}
   const income = m.annual_income ? m.annual_income / 12 : profile?.monthlyIncome
   const expenses = profile?.monthlyExpenses
 
   return (
     <section className="dash-section overview-section span-2">
-      <SectionHeading icon={Wallet} eyebrow="Financial overview" title="The month at a glance" />
+      <SectionHeading
+        icon={Wallet}
+        eyebrow={t(currentLang, 'overviewEyebrow', 'Financial overview')}
+        title={t(currentLang, 'overviewTitle', 'The month at a glance')}
+      />
       <div className="metric-grid">
-        <Metric label="Monthly income" value={money(income)} />
-        <Metric label="Monthly expenses" value={money(expenses)} />
-        <Metric label="Monthly surplus" value={money(m.monthly_surplus)} accent />
+        <Metric label={t(currentLang, 'monthlyIncome', 'Monthly income')} value={money(income)} />
+        <Metric label={t(currentLang, 'monthlyExpenses', 'Monthly expenses')} value={money(expenses)} />
+        <Metric label={t(currentLang, 'metricSurplus', 'Monthly surplus')} value={money(m.monthly_surplus)} accent />
         <Metric
-          label="Emergency runway"
+          label={t(currentLang, 'metricRunway', 'Emergency runway')}
           value={
-            m.emergency_months != null ? `${Number(m.emergency_months).toFixed(1)} mo` : 'Not available'
+            m.emergency_months != null
+              ? `${Number(m.emergency_months).toFixed(1)} ${t(currentLang, 'months', 'mo')}`
+              : '—'
           }
         />
-        <Metric label="Debt-to-income" value={percent(m.dti_ratio)} />
-        <Metric label="Savings" value={money(m.savings)} />
-        <Metric label="Total debt" value={money(m.total_debt)} />
-        <Metric label="Annual income" value={money(m.annual_income)} />
+        <Metric label={t(currentLang, 'metricDti', 'Debt-to-income')} value={percent(m.dti_ratio)} />
+        <Metric label={t(currentLang, 'metricSavings', 'Savings')} value={money(m.savings)} />
+        <Metric label={t(currentLang, 'metricDebt', 'Total debt')} value={money(m.total_debt)} />
+        <Metric label={t(currentLang, 'metricAnnualIncome', 'Annual income')} value={money(m.annual_income)} />
         <Metric
-          label="Income volatility"
-          value={m.income_volatility ? 'Volatile (gig/farmer)' : 'Stable'}
+          label={t(currentLang, 'metricVolatility', 'Income volatility')}
+          value={
+            m.income_volatility
+              ? t(currentLang, 'volatilityVolatile', 'Volatile (gig/farmer)')
+              : t(currentLang, 'volatilityStable', 'Stable')
+          }
         />
       </div>
     </section>
@@ -1130,42 +1257,55 @@ function Metric({ label, value, accent }) {
   )
 }
 
-function Risk({ data }) {
+function Risk({ data, currentLang = 'en' }) {
   const score = data.riskScore ?? 0
   const category = (data.riskCategory || 'unknown').toLowerCase()
   const tagClass = category === 'low' ? 'good' : category === 'high' ? 'danger' : 'moderate'
 
   return (
     <section className="dash-section risk-section">
-      <SectionHeading icon={ShieldCheck} eyebrow="Financial health" title="Risk, in context" />
+      <SectionHeading
+        icon={ShieldCheck}
+        eyebrow={t(currentLang, 'healthEyebrow', 'Financial health')}
+        title={t(currentLang, 'healthTitle', 'Risk, in context')}
+      />
       <div className="risk-score">
         <div className="score-ring" style={{ '--score': `${score}%` }}>
           <strong>{data.riskScore ?? '—'}</strong>
           <span>/100</span>
         </div>
         <div>
-          <span className={`status-tag ${tagClass}`}>{titleCase(category)} risk</span>
-          <p>Composite score from debt, surplus, runway, stability, and savings.</p>
+          <span className={`status-tag ${tagClass}`}>{getLocalizedRiskCategory(category, currentLang)}</span>
+          <p>{t(currentLang, 'compositeScoreDesc', 'Composite score from debt, surplus, runway, stability, and savings.')}</p>
         </div>
       </div>
       <div className="factor-list">
         {Object.entries(data.riskBreakdown || {})
           .slice(0, 5)
-          .map(([key, value]) => (
-            <div key={key}>
-              <span>{titleCase(key)}</span>
-              <b>{value}/100</b>
-              <i>
-                <em style={{ width: `${Math.min(100, Number(value) || 0)}%` }} />
-              </i>
-            </div>
-          ))}
+          .map(([key, value]) => {
+            const factorKey =
+              key.includes('debt') ? 'scoreDebt'
+              : key.includes('emergency') ? 'scoreEmergency'
+              : key.includes('income') ? 'scoreIncome'
+              : key.includes('surplus') ? 'scoreSurplus'
+              : key.includes('investment') ? 'scoreInvestment'
+              : key
+            return (
+              <div key={key}>
+                <span>{t(currentLang, factorKey, titleCase(key))}</span>
+                <b>{value}/100</b>
+                <i>
+                  <em style={{ width: `${Math.min(100, Number(value) || 0)}%` }} />
+                </i>
+              </div>
+            )
+          })}
       </div>
     </section>
   )
 }
 
-function Simulation({ data }) {
+function Simulation({ data, currentLang = 'en' }) {
   const paths = data.simulationPaths || {}
   const chartData = useMemo(() => {
     return Array.from({ length: 36 }, (_, index) => {
@@ -1181,12 +1321,11 @@ function Simulation({ data }) {
     <section className="dash-section span-2 simulation-section">
       <SectionHeading
         icon={TrendingUp}
-        eyebrow="Future simulation"
-        title="Three ways the next 36 months could unfold"
+        eyebrow={t(currentLang, 'simEyebrow', 'Future simulation')}
+        title={t(currentLang, 'simTitle', 'Three ways the next 36 months could unfold')}
       />
       <div className="simulation-note">
-        <span className="info-dot">i</span> Modeled via 1,000 Monte Carlo iterations. Scenarios to plan
-        around, not guaranteed predictions.
+        <span className="info-dot">i</span> {t(currentLang, 'simNote', 'Modeled via 1,000 Monte Carlo iterations. Scenarios to plan around, not guaranteed predictions.')}
       </div>
       {Object.keys(paths).length ? (
         <>
@@ -1215,7 +1354,7 @@ function Simulation({ data }) {
                     color: '#eef1f8',
                   }}
                   formatter={(value) => money(value)}
-                  labelFormatter={(label) => `Month ${label}`}
+                  labelFormatter={(label) => `${t(currentLang, 'atMonth', 'Month')} ${label}`}
                 />
                 <Area
                   type="monotone"
@@ -1223,7 +1362,7 @@ function Simulation({ data }) {
                   stroke="#6b7da0"
                   fill="transparent"
                   strokeWidth={2}
-                  name="Status quo"
+                  name={getLocalizedScenarioName('status_quo', currentLang)}
                 />
                 <Area
                   type="monotone"
@@ -1231,7 +1370,7 @@ function Simulation({ data }) {
                   stroke="#4f8ffa"
                   fill="url(#accentFill)"
                   strokeWidth={2.5}
-                  name="Moderate"
+                  name={getLocalizedScenarioName('moderate', currentLang)}
                 />
                 <Area
                   type="monotone"
@@ -1239,7 +1378,7 @@ function Simulation({ data }) {
                   stroke="#f0c866"
                   fill="transparent"
                   strokeWidth={2}
-                  name="Optimal"
+                  name={getLocalizedScenarioName('optimal', currentLang)}
                 />
               </AreaChart>
             </ResponsiveContainer>
@@ -1251,15 +1390,15 @@ function Simulation({ data }) {
               if (!path) return null
               return (
                 <div key={key} className="scenario-pill">
-                  <span>{titleCase(key)}</span>
+                  <span>{getLocalizedScenarioName(key, currentLang)}</span>
                   <b>{money(path.projected_value)}</b>
                   {path.projected_net_worth != null && (
-                    <small>Net worth {money(path.projected_net_worth)}</small>
+                    <small>{t(currentLang, 'netWorth', 'Net worth')} {money(path.projected_net_worth)}</small>
                   )}
                   {path.success_prob != null && (
                     <small>
-                      {Math.round(path.success_prob * 100)}% goal chance
-                      {path.goal_evaluated_at != null ? ` at month ${path.goal_evaluated_at}` : ''}
+                      {Math.round(path.success_prob * 100)}% {t(currentLang, 'goalChance', 'goal chance')}
+                      {path.goal_evaluated_at != null ? ` (${t(currentLang, 'atMonth', 'at month')} ${path.goal_evaluated_at})` : ''}
                     </small>
                   )}
                 </div>
@@ -1274,11 +1413,15 @@ function Simulation({ data }) {
   )
 }
 
-function Scams({ data }) {
+function Scams({ data, currentLang = 'en' }) {
   const scams = data.scamFlags || []
   return (
     <section className="dash-section">
-      <SectionHeading icon={AlertTriangle} eyebrow="Scam detection" title="Stay one step ahead" />
+      <SectionHeading
+        icon={AlertTriangle}
+        eyebrow={t(currentLang, 'scamEyebrow', 'Scam detection')}
+        title={t(currentLang, 'scamTitle', 'Stay one step ahead')}
+      />
       {scams.length ? (
         scams.map((item, index) => (
           <div className="alert-card" key={index}>
@@ -1293,39 +1436,46 @@ function Scams({ data }) {
       ) : (
         <Empty
           icon={ShieldCheck}
-          text="No relevant scam match was returned."
-          subtle="That is not a guarantee of safety."
+          text={t(currentLang, 'noScamMatch', 'No relevant scam match was returned.')}
+          subtle={t(currentLang, 'notSafetyGuarantee', 'That is not a guarantee of safety.')}
         />
       )}
     </section>
   )
 }
 
-function Schemes({ data }) {
+function Schemes({ data, currentLang = 'en' }) {
   const schemes = data.eligibleSchemes || []
   return (
     <section className="dash-section">
-      <SectionHeading icon={Landmark} eyebrow="Government schemes" title="Worth a closer look" />
+      <SectionHeading
+        icon={Landmark}
+        eyebrow={t(currentLang, 'schemesEyebrow', 'Government schemes')}
+        title={t(currentLang, 'schemesTitle', 'Worth a closer look')}
+      />
       {schemes.length ? (
-        schemes.map((item, index) => (
-          <div className="scheme-row" key={index}>
-            <div className="scheme-icon">
-              <Landmark size={15} />
+        schemes.map((item, index) => {
+          const loc = getLocalizedScheme(item, currentLang)
+          return (
+            <div className="scheme-row" key={index}>
+              <div className="scheme-icon">
+                <Landmark size={15} />
+              </div>
+              <div>
+                <b>{loc.name}</b>
+                <p>{loc.guide}</p>
+                {item.annual_benefit > 0 && (
+                  <small style={{ color: 'var(--teal)', fontSize: '10px' }}>
+                    {t(currentLang, 'annualBenefit', 'Benefit')}: {money(item.annual_benefit)}
+                  </small>
+                )}
+              </div>
+              <span className={`status-tag ${item.eligible ? 'good' : 'pending'}`}>
+                {item.eligible ? t(currentLang, 'eligibleBadge', 'Eligible') : t(currentLang, 'potentialBadge', 'Potential')}
+              </span>
             </div>
-            <div>
-              <b>{item.name}</b>
-              <p>{item.gap || item.how_to_apply || 'Supporting information available.'}</p>
-              {item.annual_benefit > 0 && (
-                <small style={{ color: 'var(--teal)', fontSize: '10px' }}>
-                  Benefit: {money(item.annual_benefit)}
-                </small>
-              )}
-            </div>
-            <span className={`status-tag ${item.eligible ? 'good' : 'pending'}`}>
-              {item.eligibility_status || (item.eligible ? 'Eligible' : 'Potential')}
-            </span>
-          </div>
-        ))
+          )
+        })
       ) : (
         <Empty text="No scheme matches available." />
       )}
@@ -1333,19 +1483,23 @@ function Schemes({ data }) {
   )
 }
 
-function Goals({ data }) {
+function Goals({ data, currentLang = 'en' }) {
   return (
     <section className="dash-section">
-      <SectionHeading icon={Target} eyebrow="Financial goals" title="What matters to you" />
+      <SectionHeading
+        icon={Target}
+        eyebrow={t(currentLang, 'goalsEyebrow', 'Financial goals')}
+        title={t(currentLang, 'goalsTitle', 'What matters to you')}
+      />
       {data.goals?.length ? (
         data.goals.map((goal, index) => (
           <div className="goal-row" key={index}>
             <div className="goal-number">0{index + 1}</div>
             <div>
-              <b>{goal.title}</b>
+              <b>{getLocalizedGoalTitle(goal.title, currentLang)}</b>
               <p>
-                {goal.target_amount != null ? money(goal.target_amount) : 'Target not set'}{' '}
-                {goal.horizon_months != null ? `· ${goal.horizon_months} months` : ''}
+                {goal.target_amount != null ? money(goal.target_amount) : t(currentLang, 'targetNotSet', 'Target not set')}{' '}
+                {goal.horizon_months != null ? `· ${goal.horizon_months} ${t(currentLang, 'months', 'months')}` : ''}
               </p>
             </div>
             <span className="priority">P{goal.priority ?? '—'}</span>
@@ -1358,25 +1512,32 @@ function Goals({ data }) {
   )
 }
 
-function Narrative({ data }) {
+function Narrative({ data, currentLang = 'en' }) {
   return (
     <section className="dash-section span-2 narrative">
-      <SectionHeading icon={Sparkles} eyebrow="Explainability" title="The story in the numbers" />
+      <SectionHeading
+        icon={Sparkles}
+        eyebrow={t(currentLang, 'explainabilityEyebrow', 'Explainability')}
+        title={t(currentLang, 'explainabilityTitle', 'The story in the numbers')}
+      />
       {data.decisionCards?.length ? (
-        data.decisionCards.map((card, index) => (
-          <div className="narrative-row" key={index}>
-            <span>0{index + 1}</span>
-            <div>
-              <b>{card.action}</b>
-              <p>{card.why}</p>
-              {card.if_ignored && (
-                <small style={{ color: 'var(--muted)', display: 'block', marginTop: '4px' }}>
-                  Context: {card.if_ignored}
-                </small>
-              )}
+        data.decisionCards.map((card, index) => {
+          const locCard = getLocalizedDecisionCard(card, currentLang)
+          return (
+            <div className="narrative-row" key={index}>
+              <span>0{index + 1}</span>
+              <div>
+                <b>{locCard.action}</b>
+                <p>{locCard.why}</p>
+                {locCard.if_ignored && (
+                  <small style={{ color: 'var(--muted)', display: 'block', marginTop: '4px' }}>
+                    Context: {locCard.if_ignored}
+                  </small>
+                )}
+              </div>
             </div>
-          </div>
-        ))
+          )
+        })
       ) : (
         <Empty text="Explanation is not available." />
       )}
@@ -1384,27 +1545,34 @@ function Narrative({ data }) {
   )
 }
 
-function Actions({ data }) {
+function Actions({ data, currentLang = 'en' }) {
   return (
     <section className="dash-section span-2 actions-section">
       <div className="actions-heading">
-        <SectionHeading icon={Check} eyebrow="Coach plan" title="Your next few moves" />
-        <span className="action-count">{data.actionPlan?.length || 0} actions</span>
+        <SectionHeading
+          icon={Check}
+          eyebrow={t(currentLang, 'coachEyebrow', 'Coach plan')}
+          title={t(currentLang, 'coachTitle', 'Your next few moves')}
+        />
+        <span className="action-count">{data.actionPlan?.length || 0} {t(currentLang, 'actionsCount', 'actions')}</span>
       </div>
       {data.actionPlan?.length ? (
-        data.actionPlan.map((item, index) => (
-          <div className="action-row" key={index}>
-            <span className="action-check">{index + 1}</span>
-            <div>
-              <b>{item.task}</b>
-              <p>
-                {item.daily_amount ? `${money(item.daily_amount)} / day · ` : ''}
-                {item.deadline || 'When it feels right'}
-                {item.scheme ? ` · ${item.scheme}` : ''}
-              </p>
+        data.actionPlan.map((item, index) => {
+          const locAction = getLocalizedAction(item, currentLang)
+          return (
+            <div className="action-row" key={index}>
+              <span className="action-check">{index + 1}</span>
+              <div>
+                <b>{locAction.task}</b>
+                <p>
+                  {item.daily_amount ? `${money(item.daily_amount)} / day · ` : ''}
+                  {locAction.deadline || 'When it feels right'}
+                  {item.scheme ? ` · ${item.scheme}` : ''}
+                </p>
+              </div>
             </div>
-          </div>
-        ))
+          )
+        })
       ) : (
         <Empty text="Your action plan is not available." />
       )}
@@ -1441,14 +1609,20 @@ function Empty({ text, subtle, icon: Icon = CircleDollarSign }) {
 /* ═══════════════════════════════════════════════════════════════════════════════
    CHATBOT — Single "Ask FinMate" with STT (Speech-to-Text) & TTS (Text-to-Speech)
    ═══════════════════════════════════════════════════════════════════════════════ */
-function Chatbot({ analysis, profile }) {
+function Chatbot({ analysis, profile, currentLang = 'en' }) {
   const [open, setOpen] = useState(false)
   const [input, setInput] = useState('')
   const [sending, setSending] = useState(false)
   const [listening, setListening] = useState(false)
   const [speakingIdx, setSpeakingIdx] = useState(null)
+  const [chatLang, setChatLang] = useState(currentLang || 'en')
   const messagesEndRef = useRef(null)
   const recognitionRef = useRef(null)
+
+  useEffect(() => {
+    if (currentLang) setChatLang(currentLang)
+  }, [currentLang])
+
   const [messages, setMessages] = useState([
     {
       role: 'bot',
@@ -1458,7 +1632,7 @@ function Chatbot({ analysis, profile }) {
     },
   ])
 
-  const suggestions = [
+  const activeSuggestions = DICTIONARY[chatLang]?.quickPrompts || [
     'Why is my risk score this value?',
     'Can I afford a new EMI?',
     'Where should I invest my surplus?',
@@ -1477,7 +1651,7 @@ function Chatbot({ analysis, profile }) {
       setSpeakingIdx(null)
     } else {
       setSpeakingIdx(index)
-      speakText(text, () => setSpeakingIdx(null))
+      speakText(text, () => setSpeakingIdx(null), chatLang)
     }
   }
 
@@ -1489,11 +1663,11 @@ function Chatbot({ analysis, profile }) {
     const history = messages.map((message) => ({ role: message.role, text: message.text }))
     setMessages((current) => [...current, { role: 'user', text: q }])
     try {
-      const reply = await askSaathi(q, profile, analysis, history)
+      const reply = await askSaathi(q, profile, analysis, history, chatLang)
       const replyText = reply || 'I could not generate a response. Please try again.'
       setMessages((current) => [...current, { role: 'bot', text: replyText }])
       if (shouldSpeak) {
-        speakText(replyText, () => setSpeakingIdx(null))
+        speakText(replyText, () => setSpeakingIdx(null), chatLang)
       }
     } catch {
       setMessages((current) => [...current, { role: 'bot', text: 'Something went wrong. Please try again.' }])
@@ -1522,10 +1696,11 @@ function Chatbot({ analysis, profile }) {
       return
     }
 
+    const langConfig = getLanguageConfig(chatLang)
     const rec = new SpeechRecognition()
     rec.continuous = false
     rec.interimResults = false
-    rec.lang = 'en-IN'
+    rec.lang = langConfig.sttLocale || 'en-IN'
     recognitionRef.current = rec
 
     rec.onstart = () => {
@@ -1571,13 +1746,30 @@ function Chatbot({ analysis, profile }) {
         <div className="chat-panel">
           <div className="chat-header">
             <div>
-              <b>Ask FinMate</b>
-              <small>AI-powered answers with voice & speech</small>
+              <b>{t(chatLang, 'chatHeader', 'Ask FinMate')}</b>
+              <small>{t(chatLang, 'chatSubheader', 'Multilingual financial advice with voice & speech')}</small>
             </div>
             <button onClick={() => { stopSpeaking(); setOpen(false) }} aria-label="Close chat">
               <X size={16} />
             </button>
           </div>
+
+          {/* Multilingual Switcher Pills inside chat */}
+          <div className="chat-lang-bar">
+            <span className="chat-lang-label">{t(chatLang, 'chatLangPrompt', 'Language:')}</span>
+            {LANGUAGES.map((item) => (
+              <button
+                key={item.code}
+                type="button"
+                className={`chat-lang-chip ${chatLang === item.code ? 'active' : ''}`}
+                onClick={() => setChatLang(item.code)}
+                title={item.native}
+              >
+                {item.native}
+              </button>
+            ))}
+          </div>
+
           <div className="chat-messages">
             {messages.map((message, index) => (
               <div className={`chat-message ${message.role}`} key={index}>
@@ -1587,7 +1779,7 @@ function Chatbot({ analysis, profile }) {
                     type="button"
                     className={`chat-speak-btn ${speakingIdx === index ? 'active' : ''}`}
                     onClick={() => toggleSpeak(message.text, index)}
-                    title={speakingIdx === index ? 'Stop audio' : 'Listen out loud (TTS)'}
+                    title={speakingIdx === index ? t(chatLang, 'chatStopAudio', 'Stop audio') : t(chatLang, 'chatListenTTS', 'Listen out loud (TTS)')}
                     aria-label={speakingIdx === index ? 'Stop audio' : 'Listen out loud'}
                   >
                     {speakingIdx === index ? <VolumeX size={14} /> : <Volume2 size={14} />}
@@ -1602,21 +1794,23 @@ function Chatbot({ analysis, profile }) {
             )}
             <div ref={messagesEndRef} />
           </div>
-          {/* Suggestion chips — show only when few messages */}
+
+          {/* Suggestion chips */}
           {messages.length <= 2 && (
             <div className="chat-chips">
-              {suggestions.map((s, i) => (
+              {activeSuggestions.map((s, i) => (
                 <button key={i} className="chat-chip" onClick={() => askSuggestion(s)} type="button">
                   {s}
                 </button>
               ))}
             </div>
           )}
+
           <form className="chat-form" onSubmit={send}>
             <input
               value={input}
               onChange={(event) => setInput(event.target.value)}
-              placeholder={listening ? "Listening to your voice..." : "Ask about your finances…"}
+              placeholder={listening ? t(chatLang, 'chatListening', 'Listening to your voice…') : t(chatLang, 'chatPlaceholder', 'Ask anything in your language…')}
               aria-label="Ask a financial question"
             />
             <button
@@ -1640,7 +1834,7 @@ function Chatbot({ analysis, profile }) {
         aria-label="Open financial chat"
       >
         <MessageCircle size={18} />
-        <span>{open ? 'Close' : 'Ask FinMate'}</span>
+        <span>{open ? 'Close' : t(currentLang, 'chatHeader', 'Ask FinMate')}</span>
       </button>
     </div>
   )
@@ -1649,18 +1843,23 @@ function Chatbot({ analysis, profile }) {
 /* ═══════════════════════════════════════════════════════════════════════════════
    VOICE — Full-Duplex Voice Assistant (STT Speech Recognition + TTS Audio Output)
    ═══════════════════════════════════════════════════════════════════════════════ */
-function Voice({ analysis, profile, onBack }) {
+function Voice({ analysis, profile, currentLang = 'en', onBack }) {
   const [status, setStatus] = useState('ready') // 'ready' | 'listening' | 'processing' | 'speaking' | 'error'
   const [message, setMessage] = useState('')
   const [transcript, setTranscript] = useState('')
   const [response, setResponse] = useState('')
+  const [voiceLang, setVoiceLang] = useState(currentLang || 'en')
   const recognitionRef = useRef(null)
 
-  function speakReply(text) {
+  useEffect(() => {
+    if (currentLang) setVoiceLang(currentLang)
+  }, [currentLang])
+
+  function speakReply(text, lang = voiceLang) {
     setStatus('speaking')
     speakText(text, () => {
       setStatus('ready')
-    })
+    }, lang)
   }
 
   function handleVoiceInput(query) {
@@ -1671,11 +1870,11 @@ function Voice({ analysis, profile, onBack }) {
     }
     setStatus('processing')
     setMessage('')
-    askSaathi(q, profile || {}, analysis || {}, [])
+    askSaathi(q, profile || {}, analysis || {}, [], voiceLang)
       .then((reply) => {
         const text = reply || 'I reviewed your financial profile and metrics, but was unable to generate a response. Please ask again.'
         setResponse(text)
-        speakReply(text)
+        speakReply(text, voiceLang)
       })
       .catch(() => {
         setStatus('error')
@@ -1692,10 +1891,11 @@ function Voice({ analysis, profile, onBack }) {
       return
     }
 
+    const langConfig = getLanguageConfig(voiceLang)
     const recognition = new SpeechRecognition()
     recognition.continuous = false
     recognition.interimResults = true
-    recognition.lang = 'en-IN'
+    recognition.lang = langConfig.sttLocale || 'en-IN'
     recognitionRef.current = recognition
 
     recognition.onstart = () => {
@@ -1719,7 +1919,6 @@ function Voice({ analysis, profile, onBack }) {
     }
 
     recognition.onend = () => {
-      // When user stops speaking, process the captured transcript
       setTranscript((captured) => {
         if (captured && captured.trim()) {
           handleVoiceInput(captured)
@@ -1748,14 +1947,14 @@ function Voice({ analysis, profile, onBack }) {
 
   function reListen() {
     if (response) {
-      speakReply(response)
+      speakReply(response, voiceLang)
     }
   }
 
   return (
     <main className="voice-page page-enter">
       <button className="back-button" onClick={() => { stopSpeaking(); onBack(); }}>
-        <ChevronLeft size={18} /> Back to your picture
+        <ChevronLeft size={18} /> {t(voiceLang, 'voiceCloseBtn', 'Back to Dashboard')}
       </button>
       <div className="voice-card">
         <div className={`voice-orb ${status}`}>
@@ -1769,32 +1968,49 @@ function Voice({ analysis, profile, onBack }) {
             <MicOff size={32} />
           )}
         </div>
-        <div className="eyebrow">Interactive Voice Assistant</div>
+        <div className="eyebrow">{t(voiceLang, 'voiceTitle', 'Interactive Voice Assistant')}</div>
         <h1>
-          Talk it through
+          {voiceLang === 'hi' ? 'बोलकर बात करें' : voiceLang === 'mr' ? 'बोलून संवाद साधा' : voiceLang === 'bn' ? 'কথা বলে আলোচনা করুন' : voiceLang === 'pa' ? 'ਬੋਲ ਕੇ ਗੱਲਬਾਤ ਕਰੋ' : 'Talk it through'}
           <br />
           <em>with FinMate.</em>
         </h1>
         <p>
-          Ask anything about your financial analysis aloud. FinMate listens with Speech-to-Text (STT)
-          and answers aloud with Text-to-Speech (TTS).
+          {t(voiceLang, 'voiceSubtitle', 'Speak naturally in any Indian language. FinMate will listen and speak back with tailored guidance.')}
         </p>
+
+        {/* Multilingual Selector Chips for Voice */}
+        <div className="voice-lang-bar">
+          {LANGUAGES.map((item) => (
+            <button
+              key={item.code}
+              type="button"
+              className={`voice-lang-chip ${voiceLang === item.code ? 'active' : ''}`}
+              onClick={() => {
+                stop()
+                setVoiceLang(item.code)
+              }}
+            >
+              <span>{item.native}</span>
+            </button>
+          ))}
+        </div>
+
         <div className={`voice-status ${status}`}>
           <span />{' '}
           {status === 'ready'
-            ? 'Ready to listen'
+            ? t(voiceLang, 'voiceReady', 'Ready — Click the microphone to speak')
             : status === 'listening'
-            ? 'Listening to you…'
+            ? t(voiceLang, 'voiceListening', 'Listening… speak now')
             : status === 'processing'
-            ? 'Analyzing your finances…'
+            ? t(voiceLang, 'voiceProcessing', 'Analyzing your query with FinMate agents…')
             : status === 'speaking'
-            ? 'FinMate is speaking…'
+            ? t(voiceLang, 'voiceSpeaking', 'FinMate is speaking…')
             : 'Microphone issue'}
         </div>
 
         {transcript && (
           <div className="narrative-box" style={{ textAlign: 'left', marginBottom: '16px' }}>
-            <div className="section-kicker" style={{ marginBottom: '6px' }}>You asked:</div>
+            <div className="section-kicker" style={{ marginBottom: '6px' }}>{t(voiceLang, 'voiceTranscriptLabel', 'You Said:')}</div>
             <p style={{ margin: 0, color: 'var(--text)', fontWeight: 500 }}>{transcript}</p>
           </div>
         )}
@@ -1802,7 +2018,7 @@ function Voice({ analysis, profile, onBack }) {
         {response && (
           <div className="narrative-box" style={{ textAlign: 'left', marginBottom: '16px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-              <div className="section-kicker">FinMate's Analysis:</div>
+              <div className="section-kicker">{t(voiceLang, 'voiceResponseLabel', 'FinMate Replied:')}</div>
               <button
                 type="button"
                 className="secondary-button"
@@ -1810,7 +2026,7 @@ function Voice({ analysis, profile, onBack }) {
                 onClick={status === 'speaking' ? stop : reListen}
               >
                 {status === 'speaking' ? <VolumeX size={13} /> : <Volume2 size={13} />}
-                {status === 'speaking' ? 'Mute audio' : 'Play audio (TTS)'}
+                {status === 'speaking' ? t(voiceLang, 'voiceStopBtn', 'Stop Audio') : t(voiceLang, 'voiceReListenBtn', 'Listen Again')}
               </button>
             </div>
             <p style={{ margin: 0, whiteSpace: 'pre-line' }}>{response}</p>
@@ -1825,7 +2041,7 @@ function Voice({ analysis, profile, onBack }) {
 
         {status === 'listening' || status === 'speaking' ? (
           <button className="secondary-button voice-stop" onClick={stop}>
-            <X size={17} /> {status === 'speaking' ? 'Stop audio' : 'Stop listening'}
+            <X size={17} /> {status === 'speaking' ? t(voiceLang, 'voiceStopBtn', 'Stop Audio') : t(voiceLang, 'chatListening', 'Stop listening')}
           </button>
         ) : (
           <button
@@ -1838,12 +2054,12 @@ function Voice({ analysis, profile, onBack }) {
             ) : (
               <Mic size={17} />
             )}{' '}
-            {status === 'processing' ? 'Analyzing with Groq…' : 'Start speaking'}
+            {status === 'processing' ? t(voiceLang, 'voiceProcessing', 'Analyzing…') : t(voiceLang, 'voiceStartBtn', 'Start Speaking')}
           </button>
         )}
 
         <small className="voice-note">
-          Full duplex voice: Browser STT (voice input) + Groq AI analysis + Browser TTS (voice audio output).
+          Full duplex multilingual voice: Speech-to-Text (STT) + Groq AI analysis + Text-to-Speech (TTS).
         </small>
       </div>
     </main>

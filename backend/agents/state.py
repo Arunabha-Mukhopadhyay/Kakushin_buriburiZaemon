@@ -47,7 +47,7 @@ class FinancialProfileInput(BaseModel):
     riskAppetite: str = "moderate"                     # conservative|moderate|aggressive
 
     # Accessibility
-    preferredLang: str = "en"                          # en|hi|mr|kn
+    preferredLang: str = "en"                          # en|hi|mr|bn|pa|kn
 
     # Optional scam detection input
     suspiciousInput: Optional[str] = None

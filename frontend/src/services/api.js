@@ -1,4 +1,5 @@
 import { createMockAnalysis } from '../mocks/analysisResponse'
+import { detectScriptLanguage } from '../utils/i18n'
 
 function formatUrl(url) {
   if (!url || url === 'undefined' || url === 'null') return ''
@@ -235,9 +236,11 @@ export async function getVoiceToken() {
 /**
  * Client-side intelligent financial advisor fallback
  * Grounded in the user's specific financial profile and computed analysis.
+ * Supports Marathi (mr), Hindi (hi), Bengali (bn), Punjabi (pa), and English (en).
  */
-function clientSynthesizeChat(question, profile = {}, analysis = {}) {
-  const q = question.toLowerCase()
+function clientSynthesizeChat(question, profile = {}, analysis = {}, language = 'en') {
+  const q = (question || '').toLowerCase()
+  const targetLang = detectScriptLanguage(question) || language || 'en'
   const m = analysis.financialMetrics || {}
   const income = Number(profile.monthlyIncome || 0)
   const expenses = Number(profile.monthlyExpenses || 0)
@@ -255,9 +258,141 @@ function clientSynthesizeChat(question, profile = {}, analysis = {}) {
   const inr = (v) =>
     v == null || isNaN(v) ? 'Not available' : '₹' + Math.round(Number(v)).toLocaleString('en-IN')
 
-  // 1. Affordability / Car / House / Loan / Purchase / EMI
+  const safeEmi = Math.round(surplus * 0.4)
+
+  // Multilingual Marathi responses
+  if (targetLang === 'mr') {
+    if (/afford|buy|car|house|loan|purchase|emi|गाडी|कार|घर|कर्ज|खरेदी|हप्ता/.test(q)) {
+      if (surplus > 0) {
+        return (
+          `तुमच्या प्रत्यक्ष आर्थिक आकडेवारीवर आधारित:\n\n` +
+          `• **मासिक उत्पन्न**: ${inr(income)}\n` +
+          `• **मासिक घरखर्च**: ${inr(expenses)}/महिना\n` +
+          `• **सध्याचे हप्ते (EMI)**: ${inr(emi)}/महिना (DTI: ${(dti * 100).toFixed(1)}%)\n` +
+          `• **निव्वळ मासिक शिल्लक**: **${inr(surplus)}/महिना**\n\n` +
+          `✅ **सल्ला**: तुमच्या **${inr(surplus)}** मासिक शिलकीमुळे तुमची आर्थिक स्थिती स्थिर आहे. ` +
+          `तुम्ही जास्तीत जास्त **${inr(safeEmi)}/महिना** (शिलकीच्या ४०%) पर्यंतचा नवीन हप्ता सुरक्षितपणे भरू शकता, जेणेकरून भविष्यातील बचतीसाठी शिल्लक राहील.\n\n` +
+          (runway < 6
+            ? `⚠️ *आपत्कालीन निधी इशारा*: सध्याची बचत ${inr(savings)} ही ${runway.toFixed(1)} महिन्यांचा खर्च भागवू शकते. नवीन खर्चापूर्वी ६ महिन्यांचा आपत्कालीन निधी (${inr(expenses * 6)}) सुरक्षित ठेवा.`
+            : `🎉 *सुरक्षित राखीव निधी*: तुमचा आपत्कालीन निधी भक्कम आहे (${runway.toFixed(1)} महिने - ${inr(savings)}).`)
+        )
+      } else {
+        return `⚠️ **खबरदारी**: तुमची सध्याची मासिक शिल्लक ${inr(surplus)} आहे. आत्ता कोणतेही नवीन कर्ज किंवा हप्ता घेणे आर्थिक संकटाचे ठरेल. प्रथम अनावश्यक खर्च कमी करा.`
+      }
+    }
+    if (/invest|surplus|sip|save|गुंतवणूक|बचत|फंड|शेअर/.test(q)) {
+      const tier1 = Math.round(surplus * 0.2)
+      const tier2 = Math.round(surplus * 0.3)
+      const tier3 = Math.round(surplus * 0.5)
+      return (
+        `तुमच्या **${inr(surplus)}** मासिक शिलकीसाठी योग्य गुंतवणूक योजना:\n\n` +
+        `1. **आपत्कालीन निधी (२०% ≈ ${inr(tier1)}/महिना)**: ६ महिन्यांचा घरखर्च (${inr(expenses * 6)}) होईपर्यंत सुरक्षित बँक खात्यात ठेवा.\n` +
+        `2. **हमी परतावा (३०% ≈ ${inr(tier2)}/महिना)**: पीपीएफ (PPF) किंवा पोस्ट ऑफिस रिकरिंग डिपॉझिटमध्ये सुरक्षित वाढ.\n` +
+        `3. **दीर्घकालीन संपत्ती (५०% ≈ ${inr(tier3)}/महिना)**: निफ्टी ५० किंवा लार्ज-कॅप इंडेक्स फंडामध्ये SIP.`
+      )
+    }
+    return (
+      `तुमचा आर्थिक सारांश:\n\n` +
+      `• मासिक उत्पन्न: ${inr(income)} | मासिक खर्च: ${inr(expenses)}\n` +
+      `• निव्वळ मासिक शिल्लक: **${inr(surplus)}/महिना**\n` +
+      `• आपत्कालीन निधी: **${runway.toFixed(1)} महिने** (${inr(savings)})\n` +
+      `• आर्थिक आरोग्य स्कोअर: **${riskScore}/100** (${riskCat})\n` +
+      `• एकूण कर्ज: ${inr(debt)} (DTI: ${(dti * 100).toFixed(1)}%)\n\n` +
+      `तुम्ही मला नवीन गाडी, घर, कर्ज किंवा बचतीविषयी कोणताही प्रश्न विचारू शकता!`
+    )
+  }
+
+  // Multilingual Hindi responses
+  if (targetLang === 'hi') {
+    if (/afford|buy|car|house|loan|purchase|emi|गाड़ी|कार|घर|कर्ज|खरीद|लोन|किस्त/.test(q)) {
+      if (surplus > 0) {
+        return (
+          `आपके वास्तविक वित्तीय आंकड़ों के अनुसार:\n\n` +
+          `• **मासिक आय**: ${inr(income)}\n` +
+          `• **मासिक खर्च**: ${inr(expenses)}/माह\n` +
+          `• **वर्तमान EMI**: ${inr(emi)}/माह (DTI: ${(dti * 100).toFixed(1)}%)\n` +
+          `• **शुद्ध मासिक अधिशेष (सरप्लस)**: **${inr(surplus)}/माह**\n\n` +
+          `✅ **सटीक सलाह**: आपके **${inr(surplus)}** के मासिक सरप्लस के साथ, आप अधिकतम **${inr(safeEmi)}/माह** (सरप्लस का 40%) तक की नई EMI सुरक्षित रूप से वहन कर सकते हैं।\n\n` +
+          (runway < 6
+            ? `⚠️ *इमरजेंसी फंड सतर्कता*: आपकी वर्तमान बचत ${inr(savings)} लगभग ${runway.toFixed(1)} महीने के खर्च के बराबर है। डाउन पेमेंट से पहले 6 महीने का बफर (${inr(expenses * 6)}) सुरक्षित करें।`
+            : `🎉 *मजबूत सुरक्षा कवच*: आपका आपातकालीन फंड पर्याप्त है (${runway.toFixed(1)} महीने - ${inr(savings)})।`)
+        )
+      } else {
+        return `⚠️ **सावधानी**: आपका वर्तमान मासिक सरप्लस ${inr(surplus)} है। अभी कोई नया कर्ज लेना बजट पर भारी दबाव डालेगा।`
+      }
+    }
+    if (/invest|surplus|sip|save|निवेश|बचत|फंड|म्यूचुअल/.test(q)) {
+      const tier1 = Math.round(surplus * 0.2)
+      const tier2 = Math.round(surplus * 0.3)
+      const tier3 = Math.round(surplus * 0.5)
+      return (
+        `आपके **${inr(surplus)}** मासिक सरप्लस के लिए अनुशंसित निवेश रणनीति:\n\n` +
+        `1. **तरलता व सुरक्षा (20% ≈ ${inr(tier1)}/माह)**: 6 महीने के इमरजेंसी फंड (${inr(expenses * 6)}) तक लिक्विड फंड में।\n` +
+        `2. **सुरक्षित रिटर्न (30% ≈ ${inr(tier2)}/माह)**: PPF या बैंक आरडी में कर-मुक्त सुनिश्चित विकास।\n` +
+        `3. **दीर्घकालिक धन निर्माण (50% ≈ ${inr(tier3)}/माह)**: निफ्टी 50 इंडेक्स फंड में नियमित SIP।`
+      )
+    }
+    return (
+      `आपकी वित्तीय प्रोफ़ाइल का त्वरित विवरण:\n\n` +
+      `• आय: ${inr(income)}/माह | खर्च: ${inr(expenses)}/माह\n` +
+      `• शुद्ध सरप्लस: **${inr(surplus)}/माह**\n` +
+      `• इमरजेंसी बैकअप: **${runway.toFixed(1)} महीने** (${inr(savings)})\n` +
+      `• वित्तीय स्वास्थ्य स्कोर: **${riskScore}/100** (${riskCat})\n` +
+      `• कुल कर्ज: ${inr(debt)} (DTI: ${(dti * 100).toFixed(1)}%)\n\n` +
+      `आप मुझसे कार लोन, घर, निवेश या सरकारी योजनाओं पर कोई भी प्रश्न पूछ सकते हैं!`
+    )
+  }
+
+  // Multilingual Bengali responses
+  if (targetLang === 'bn') {
+    if (/afford|buy|car|house|loan|purchase|গাড়ি|বাড়ি|লোন|কেনা|কিস্তি/.test(q)) {
+      if (surplus > 0) {
+        return (
+          `আপনার প্রকৃত আর্থিক তথ্য অনুসারে:\n\n` +
+          `• **মাসিক আয়**: ${inr(income)}\n` +
+          `• **মাসিক খরচ**: ${inr(expenses)}/মাস\n` +
+          `• **বর্তমান কিস্তি (EMI)**: ${inr(emi)}/মাস (DTI: ${(dti * 100).toFixed(1)}%)\n` +
+          `• **মাসিক অতিরিক্ত সঞ্চয়**: **${inr(surplus)}/মাস**\n\n` +
+          `✅ **উপদেশ**: আপনার অতিরিক্ত সঞ্চয় বিবেচনায় আপনি নিরাপদে প্রতি মাসে সর্বোচ্চ **${inr(safeEmi)}** পর্যন্ত নতুন কিস্তি নিতে পারেন।`
+        )
+      }
+      return `⚠️ **সতর্কতা**: বর্তমানে আপনার মাসিক অতিরিক্ত সাশ্রয় কম (${inr(surplus)})। নতুন ঋণ নেওয়া ঝুঁকিপূর্ণ হবে।`
+    }
+    return (
+      `আপনার আর্থিক সারসংক্ষেপ:\n\n` +
+      `• মাসিক আয়: ${inr(income)} | মাসিক খরচ: ${inr(expenses)}\n` +
+      `• অতিরিক্ত সঞ্চয়: **${inr(surplus)}/মাস**\n` +
+      `• জরুরি ব্যাকআপ: **${runway.toFixed(1)} মাস** (${inr(savings)})\n` +
+      `• স্বাস্থ্য স্কোর: **${riskScore}/100** (${riskCat})`
+    )
+  }
+
+  // Multilingual Punjabi responses
+  if (targetLang === 'pa') {
+    if (/afford|buy|car|house|loan|purchase|ਗੱਡੀ|ਕਾਰ|ਘਰ|ਕਰਜ਼ਾ|ਲੋਨ|ਕਿਸ਼ਤ/.test(q)) {
+      if (surplus > 0) {
+        return (
+          `ਤੁਹਾਡੇ ਅਸਲ ਵਿੱਤੀ ਅੰਕੜਿਆਂ ਮੁਤਾਬਕ:\n\n` +
+          `• **ਮਾਸਿਕ ਆਮਦਨ**: ${inr(income)}\n` +
+          `• **ਮਾਸਿਕ ਖਰਚੇ**: ${inr(expenses)}/ਮਹੀਨਾ\n` +
+          `• **ਮੌਜੂਦਾ ਕਿਸ਼ਤ (EMI)**: ${inr(emi)}/ਮਹੀਨਾ (DTI: ${(dti * 100).toFixed(1)}%)\n` +
+          `• **ਵਾਧੂ ਬੱਚਤ (ਸਰਪਲੱਸ)**: **${inr(surplus)}/ਮਹੀਨਾ**\n\n` +
+          `✅ **ਸਲਾਹ**: ਤੁਸੀਂ ਵੱਧ ਤੋਂ ਵੱਧ **${inr(safeEmi)}/ਮਹੀਨਾ** (ਬੱਚਤ ਦਾ 40%) ਤੱਕ ਦੀ ਨਵੀਂ ਕਿਸ਼ਤ ਆਸਾਨੀ ਨਾਲ ਚੁਕਾ ਸਕਦੇ ਹੋ।`
+        )
+      }
+      return `⚠️ **ਸਾਵਧਾਨੀ**: ਮੌਜੂਦਾ ਸਮੇਂ ਤੁਹਾਡੀ ਮਹੀਨਾਵਾਰ ਬੱਚਤ ਘੱਟ ਹੈ (${inr(surplus)})। ਨਵਾਂ ਲੋਨ ਲੈਣ ਤੋਂ ਬਚੋ।`
+    }
+    return (
+      `ਤੁਹਾਡੀ ਵਿੱਤੀ ਸਥਿਤੀ ਦਾ ਸੰਖੇਪ:\n\n` +
+      `• ਆਮਦਨ: ${inr(income)}/ਮਹੀਨਾ | ਖਰਚੇ: ${inr(expenses)}/ਮਹੀਨਾ\n` +
+      `• ਵਾਧੂ ਬੱਚਤ: **${inr(surplus)}/ਮਹੀਨਾ**\n` +
+      `• ਐਮਰਜੈਂਸੀ ਫੰਡ: **${runway.toFixed(1)} ਮਹੀਨੇ** (${inr(savings)})\n` +
+      `• ਸਿਹਤ ਸਕੋਰ: **${riskScore}/100** (${riskCat})`
+    )
+  }
+
+  // English Response
   if (/afford|buy|car|house|loan|purchase|spend|emi|bike|phone|iphone|vacation|borrow/.test(q)) {
-    const safeEmi = Math.round(surplus * 0.4)
     if (surplus > 0) {
       return (
         `Based on your actual financial numbers:\n\n` +
@@ -278,7 +413,6 @@ function clientSynthesizeChat(question, profile = {}, analysis = {}) {
     }
   }
 
-  // 2. Investment / Surplus Roadmap
   if (/invest|surplus|mutual fund|sip|save|stocks|ppf|fd|allocation|portfolio|grow/.test(q)) {
     if (surplus > 0) {
       const tier1 = Math.round(surplus * 0.2)
@@ -300,7 +434,6 @@ function clientSynthesizeChat(question, profile = {}, analysis = {}) {
     }
   }
 
-  // 3. Emergency Fund / Runway
   if (/emergency|runway|buffer|contingency|reserve|safety/.test(q)) {
     const target = expenses * 6
     const gap = target - savings
@@ -316,7 +449,6 @@ function clientSynthesizeChat(question, profile = {}, analysis = {}) {
     )
   }
 
-  // 4. Schemes
   if (/scheme|government|pmsby|pmjjby|pmay|apy|nps|subsidy/.test(q)) {
     if (!schemes.length) {
       return `Every Indian bank account holder should activate **PMSBY** (₹20/yr accidental cover) and **PMJJBY** (₹436/yr life cover). Ask your bank branch or use net banking.`
@@ -330,7 +462,6 @@ function clientSynthesizeChat(question, profile = {}, analysis = {}) {
     return `Here are the government schemes matched to your profile:\n\n${items.join('\n\n')}`
   }
 
-  // 5. Debt & DTI
   if (/debt|dti|ratio|borrow|credit|owe/.test(q)) {
     const dtiPct = (dti * 100).toFixed(1)
     let statusText =
@@ -348,7 +479,7 @@ function clientSynthesizeChat(question, profile = {}, analysis = {}) {
     )
   }
 
-  // 6. Overall Profile Summary / Default
+  // Default summary
   return (
     `Here is your financial picture at a glance, with FinMate:\n\n` +
     `• **Income**: ${inr(income)}/mo | **Expenses**: ${inr(expenses)}/mo\n` +
@@ -365,23 +496,22 @@ function clientSynthesizeChat(question, profile = {}, analysis = {}) {
 
 /**
  * Ask FinMate — connects to backend /chat endpoint with local fallback.
+ * Sends language code and tries live backend first even in mock mode.
  */
-export async function askSaathi(message, profile, analysis, history = []) {
-  if (isMockMode()) {
-    await new Promise((r) => setTimeout(r, 450))
-    return clientSynthesizeChat(message, profile, analysis)
-  }
+export async function askSaathi(message, profile, analysis, history = [], language = 'en') {
+  const targetLang = detectScriptLanguage(message) || language || 'en'
 
+  // Attempt live backend first so users get genuine Groq AI replies
   for (const base of AGENT_API_CANDIDATES) {
     try {
       const url = base.endsWith('/') ? `${base}chat` : `${base}/chat`
       const controller = new AbortController()
-      const timeoutId = setTimeout(() => controller.abort(), 12000)
+      const timeoutId = setTimeout(() => controller.abort(), 25000)
 
       const res = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message, profile, analysis, history }),
+        body: JSON.stringify({ message, profile, analysis, history, language: targetLang }),
         signal: controller.signal,
       })
       clearTimeout(timeoutId)
@@ -395,7 +525,10 @@ export async function askSaathi(message, profile, analysis, history = []) {
     }
   }
 
-  // Fallback to client synthesis if backend /chat is unreachable
-  return clientSynthesizeChat(message, profile, analysis)
+  // If mock mode or backend unavailable, provide client-side dynamic synthesis
+  if (isMockMode()) {
+    await new Promise((r) => setTimeout(r, 300))
+  }
+  return clientSynthesizeChat(message, profile, analysis, targetLang)
 }
 

@@ -158,6 +158,7 @@ class ChatInput(BaseModel):
     profile: dict = Field(default_factory=dict)
     analysis: dict = Field(default_factory=dict)
     history: list = Field(default_factory=list)
+    language: str = Field(default="en")
 
 
 @app.post("/chat")
@@ -170,5 +171,6 @@ async def chat(payload: ChatInput):
         profile=payload.profile,
         analysis=payload.analysis,
         history=payload.history,
+        language=payload.language,
     )
     return {"reply": reply}
