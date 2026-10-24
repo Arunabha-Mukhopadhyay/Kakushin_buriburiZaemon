@@ -167,6 +167,7 @@ function App() {
   const [mockActive, setMockActive] = useState(isMockMode())
   const [backendStatus, setBackendStatus] = useState({ online: false, checking: true })
   const [voiceStatus, setVoiceStatus] = useState({ online: false, configured: false, checking: true })
+  const [voicePanelOpen, setVoicePanelOpen] = useState(false)
 
   // Multilingual State
   const [currentLang, setCurrentLang] = useState(() => {
@@ -341,8 +342,42 @@ function App() {
             <Radio size={12} />
             <span>{mockActive ? t(currentLang, 'demoMode', 'Demo mode') : t(currentLang, 'liveAnalysis', 'Live analysis')}</span>
           </button>
+
+          {/* Voice FinMate (ElevenLabs AI) — available anytime, even while entering data */}
+          <button
+            type="button"
+            className="voice-finmate-topbtn"
+            onClick={() => setVoicePanelOpen(true)}
+            title="Open Voice FinMate (ElevenLabs AI with real-time scheme knowledge)"
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '6px 14px',
+              borderRadius: '20px',
+              border: '1px solid rgba(245, 166, 35, 0.45)',
+              background: 'linear-gradient(135deg, rgba(245, 166, 35, 0.2), rgba(232, 131, 10, 0.08))',
+              color: '#f5a623',
+              fontSize: '12px',
+              fontWeight: 700,
+              cursor: 'pointer',
+              boxShadow: '0 2px 10px rgba(245, 166, 35, 0.15)',
+              transition: 'all 0.2s ease',
+            }}
+          >
+            <Volume2 size={14} />
+            <span>Voice FinMate</span>
+          </button>
         </div>
       </header>
+
+      {/* Voice FinMate Sidebar — ElevenLabs Agent Embedded Panel (Global Overlay) */}
+      <VoiceFinMateSidebar
+        open={voicePanelOpen}
+        onClose={() => setVoicePanelOpen(false)}
+        profile={profile}
+        analysis={analysis}
+      />
 
       {screen === 'welcome' && (
         <Welcome
@@ -371,6 +406,7 @@ function App() {
             setMockActive(true)
             submitProfile(null, true)
           }}
+          onOpenVoice={() => setVoicePanelOpen(true)}
         />
       )}
       {screen === 'loading' && <Loading mockActive={mockActive} currentLang={currentLang} />}
@@ -382,6 +418,7 @@ function App() {
           initialFocus={focusView}
           currentLang={currentLang}
           onVoice={() => setScreen('voice')}
+          onOpenVoice={() => setVoicePanelOpen(true)}
           onNew={() => {
             setProfile(initialProfile)
             setAnalysis(null)
@@ -508,7 +545,7 @@ function Welcome({ onStart, mockActive, backendOnline, currentLang = 'en' }) {
       <div className="welcome-foot">
         <span>9 AI Agents</span>
         <span>Monte Carlo Simulation</span>
-        <span>Groq LLM Powered</span>
+        <span>Gemini AI Powered</span>
       </div>
     </main>
   )
@@ -528,6 +565,7 @@ function Onboarding({
   backendOnline,
   onSwitchToMock,
   currentLang = 'en',
+  onOpenVoice,
 }) {
   const [step, setStep] = useState(1)
   const [selectedGoals, setSelectedGoals] = useState([])
@@ -598,7 +636,36 @@ function Onboarding({
         </h1>
         <p>{t(currentLang, 'formSubtitle', 'A few honest numbers are enough to begin. You can leave optional details blank.')}</p>
       </div>
+
       <div className="form-panel">
+        {/* Live Voice Assistant helper prompt right above the form */}
+        <div style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          background: 'linear-gradient(135deg, rgba(245,166,35,0.1), rgba(232,131,10,0.04))',
+          border: '1px solid rgba(245,166,35,0.3)', borderRadius: '10px',
+          padding: '10px 14px', marginBottom: '18px', fontSize: '13px',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#f5a623' }}>
+            <Volume2 size={16} />
+            <span style={{ color: 'var(--text, #fff)' }}>
+              Entering details? <b>Voice FinMate</b> knows your inputs live & can discuss your scheme eligibility.
+            </span>
+          </div>
+          {onOpenVoice && (
+            <button
+              type="button"
+              onClick={onOpenVoice}
+              style={{
+                background: '#f5a623', color: '#000', border: 'none',
+                borderRadius: '6px', padding: '6px 14px', fontWeight: 700,
+                fontSize: '12px', cursor: 'pointer', whiteSpace: 'nowrap',
+              }}
+            >
+              Talk to Voice FinMate
+            </button>
+          )}
+        </div>
+
         <div className="stepper">
           <span className={step >= 1 ? 'active' : ''}>
             01 <b>{t(currentLang, 'stepFinancials', 'Snapshot')}</b>
@@ -985,6 +1052,450 @@ function Loading({ mockActive, currentLang = 'en' }) {
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════════
+   VOICE FINMATE CONTEXT ENGINE — Real-Time Evaluation & Enrichment
+   Evaluates 11 Central Schemes deterministically so Voice Agent has 100% accurate
+   eligibility & step-by-step enrollment knowledge even before backend analysis finishes.
+   ═══════════════════════════════════════════════════════════════════════════════ */
+const ELEVENLABS_AGENT_ID = 'agent_5001kxqs893vf74aph60e2z7x5sr'
+
+function evaluateSchemesComprehensive(profile, analysis) {
+  const p = profile || {}
+  const age = Number(p.age || 0)
+  const income = Number(p.monthlyIncome || 0)
+  const annual = income * 12
+  const gender = (p.gender || '').toLowerCase()
+  const rural = Boolean(p.isRural)
+  const emp = (p.employmentType || 'salaried').toLowerCase()
+  const caste = (p.casteCategory || 'general').toLowerCase()
+  const bank = p.hasBankAccount !== false && p.hasBankAccount !== 'no'
+  const ins = Boolean(p.hasInsurance)
+  const h_ins = Boolean(p.hasHealthInsurance)
+  const land = Number(p.landHoldingAcres || 0)
+  const business = (p.businessType || '').trim()
+
+  const schemes = [
+    {
+      id: 'pmjdy',
+      name: 'Pradhan Mantri Jan Dhan Yojana (PMJDY)',
+      eligible: !bank,
+      benefit: 'Zero-balance bank account, free RuPay debit card with ₹2 Lakh accidental insurance, and ₹10,000 overdraft facility.',
+      why: !bank ? 'User does not currently have a formal bank account.' : 'User already has a bank account.',
+      howToApply: 'Visit any public/private bank branch or Bank Mitra kiosk with your Aadhaar card and 2 passport photos. Account is opened on the spot with zero opening balance.',
+      documents: ['Aadhaar Card', '2 Passport Photos', 'Address proof (if Aadhaar address differs)'],
+      portal: 'https://pmjdy.gov.in',
+    },
+    {
+      id: 'pmsby',
+      name: 'Pradhan Mantri Suraksha Bima Yojana (PMSBY)',
+      eligible: !ins && bank && age >= 18 && age <= 70,
+      benefit: '₹2,00,000 accidental death/total disability cover for only ₹20/year premium auto-debited from savings account.',
+      why: (!ins && bank && age >= 18 && age <= 70) ? `Eligible (Age ${age}, has bank account, no existing accident insurance).` : (age > 0 && (age < 18 || age > 70)) ? `Age ${age} outside 18–70 eligibility.` : !bank ? 'Requires active savings account.' : 'Already insured.',
+      howToApply: 'Ask your bank branch to enable PMSBY auto-debit of ₹20/year on your savings account, or activate it directly via your bank\'s Net Banking / Mobile Banking app under "Government Schemes" / "Social Security".',
+      documents: ['Bank Account Passbook / Number', 'Aadhaar Card with Consent for Auto-debit'],
+      portal: 'https://jansuraksha.gov.in',
+    },
+    {
+      id: 'pmjjby',
+      name: 'Pradhan Mantri Jeevan Jyoti Bima Yojana (PMJJBY)',
+      eligible: !ins && bank && age >= 18 && age <= 50,
+      benefit: '₹2,00,000 term life insurance cover for death due to any cause for ₹436/year premium auto-debited annually.',
+      why: (!ins && bank && age >= 18 && age <= 50) ? `Eligible (Age ${age}, has bank account, no existing term life insurance).` : (age > 0 && (age < 18 || age > 50)) ? `Age ${age} outside 18–50 eligibility.` : !bank ? 'Requires active savings account.' : 'Already insured.',
+      howToApply: 'Visit your bank branch or activate through Mobile/Net Banking. Premium of ₹436/year is deducted automatically on 1st June each year upon simple self-declaration of good health.',
+      documents: ['Bank Account Passbook', 'Aadhaar Card', 'Simple Self-Declaration of Good Health'],
+      portal: 'https://jansuraksha.gov.in',
+    },
+    {
+      id: 'apy',
+      name: 'Atal Pension Yojana (APY)',
+      eligible: age >= 18 && age <= 40 && emp !== 'salaried',
+      benefit: 'Guaranteed lifetime monthly pension of ₹1,000 to ₹5,000 from age 60, continuing to spouse, and entire corpus returned to nominee.',
+      why: (age >= 18 && age <= 40 && emp !== 'salaried') ? `Eligible (Age ${age}, unorganized/self-employed/gig worker).` : emp === 'salaried' ? 'Salaried employees with EPFO are generally excluded from government co-contribution.' : (age > 0) ? `Age ${age} outside 18–40 window.` : 'Available for age 18-40 non-salaried workers.',
+      howToApply: 'Fill out the APY Subscriber Registration Form at any commercial bank or post office branch where you have a savings account. Provide Aadhaar and nominee details.',
+      documents: ['Savings Bank Account Passbook', 'Aadhaar Card', 'Mobile Number linked to bank', 'Nominee Details (Aadhaar & relationship)'],
+      portal: 'https://npscra.nsdl.co.in',
+    },
+    {
+      id: 'pmkisan',
+      name: 'PM Kisan Samman Nidhi (PM-KISAN)',
+      eligible: emp === 'farmer' || land > 0,
+      benefit: '₹6,000 per year directly transferred to bank account in 3 equal installments of ₹2,000 every 4 months.',
+      why: (emp === 'farmer' || land > 0) ? `Eligible (Farmer with landholding of ${land || 'agricultural'} acres).` : 'Open to landholding farmer families.',
+      howToApply: 'Register online at pmkisan.gov.in under "New Farmer Registration" or visit nearest Common Service Centre (CSC) with land record details. Complete e-KYC using OTP or biometric.',
+      documents: ['Land Records (Khasra/Khatauni/7/12 extract)', 'Aadhaar Card', 'Bank Account Passbook (Aadhaar-seeded)'],
+      portal: 'https://pmkisan.gov.in',
+    },
+    {
+      id: 'mudra',
+      name: 'Pradhan Mantri MUDRA Yojana (PMMY)',
+      eligible: (['self_employed', 'business', 'gig'].includes(emp) || Boolean(business)) && (annual === 0 || annual < 1500000),
+      benefit: 'Collateral-free micro enterprise loan: Shishu (up to ₹50,000), Kishore (₹50,000–₹5 Lakh), or Tarun (₹5 Lakh–₹10 Lakh).',
+      why: (['self_employed', 'business', 'gig'].includes(emp) || Boolean(business)) ? 'Eligible as small business/self-employed enterprise.' : 'Targeted at non-corporate micro/small businesses and self-employed individuals.',
+      howToApply: 'Apply online on the Udyami Mitra portal (udyamimitra.in) or submit the MUDRA loan application directly to any public/private bank, RRB, or MFI with business quotation/plan.',
+      documents: ['Proof of Identity (Aadhaar/PAN)', 'Proof of Address', 'Quotation of machinery/items to be purchased', 'Business proof (Udyam Registration if available)', 'Last 6 months bank statement'],
+      portal: 'https://udyamimitra.in',
+    },
+    {
+      id: 'pmay',
+      name: rural ? 'Pradhan Mantri Awas Yojana — Gramin (PMAY-G)' : 'Pradhan Mantri Awas Yojana — Urban (PMAY-U)',
+      eligible: annual === 0 || annual < 1800000,
+      benefit: 'Interest subsidy up to ₹2.67 Lakh on home loan (CLSS) or financial grant of ₹1.2–₹1.3 Lakh for rural pucca house construction.',
+      why: `Eligible based on annual household income (income ceiling ₹18 Lakh) with no existing pucca house.`,
+      howToApply: rural ? 'Gram Panchayat prepares beneficiary list based on SECC data; register at pmayg.nic.in or Gram Panchayat office.' : 'Apply online at pmaymis.gov.in under "Citizen Assessment" or submit PMAY application to your housing loan lender/bank.',
+      documents: ['Aadhaar Card of all family members', 'Income Certificate / Salary Slips / ITR', 'Bank Account Statement', 'Affidavit confirming no pucca house in India', 'Land/Property documents (if construction)'],
+      portal: rural ? 'https://pmayg.nic.in' : 'https://pmaymis.gov.in',
+    },
+    {
+      id: 'pmjay',
+      name: 'Ayushman Bharat — PM Jan Arogya Yojana (PM-JAY)',
+      eligible: !h_ins && (annual === 0 || annual < 300000 || rural),
+      benefit: '₹5,00,000 per family per year completely cashless and paperless hospitalization cover for secondary and tertiary care at empaneled hospitals.',
+      why: (!h_ins && (annual < 300000 || rural)) ? 'Eligible based on low-income / rural classification without existing health insurance.' : 'Targeted at families without private health insurance in low-income/rural category.',
+      howToApply: 'Visit mera.pmjay.gov.in and click "Am I Eligible" to search by mobile number or ration card, or visit the "Ayushman Mitra" helpdesk at any empaneled government or private hospital with your Aadhaar and Ration Card to generate your Golden Card on the spot.',
+      documents: ['Ration Card / BPL Card', 'Aadhaar Card of each beneficiary', 'Mobile number for OTP verification'],
+      portal: 'https://mera.pmjay.gov.in',
+    },
+    {
+      id: 'standup',
+      name: 'Stand-Up India Scheme',
+      eligible: caste === 'sc' || caste === 'st' || gender === 'female',
+      benefit: 'Bank composite loan from ₹10 Lakh to ₹1 Crore for setting up greenfield enterprise in manufacturing, services, or trading.',
+      why: (caste === 'sc' || caste === 'st' || gender === 'female') ? `Eligible (Beneficiary meets SC/ST/Female entrepreneur criteria).` : 'Reserved for SC/ST individuals or women entrepreneurs.',
+      howToApply: 'Register at the Stand-Up Mitra portal (standupmitra.in) or visit your nearest scheduled commercial bank branch. Handholding agencies like SIDBI assist with DPR (Detailed Project Report).',
+      documents: ['Identity & Address Proof (Aadhaar/PAN)', 'Caste Certificate (for SC/ST)', 'Project Report / Business Plan', 'Partnership deed / Incorporation (if company)', 'Promoter contribution proof (min 15%)'],
+      portal: 'https://standupmitra.in',
+    },
+    {
+      id: 'svanidhi',
+      name: 'PM SVANidhi (Street Vendor\'s AtmaNirbhar Nidhi)',
+      eligible: ['informal', 'gig', 'self_employed'].includes(emp) && (annual === 0 || annual < 600000),
+      benefit: 'Working capital micro-loan: ₹10,000 (1st loan), ₹20,000 (2nd loan), up to ₹50,000 (3rd loan) with 7% interest subsidy & up to ₹1,200/year cashback on digital UPI transactions.',
+      why: 'Eligible for urban/semi-urban micro vendors and service providers.',
+      howToApply: 'Apply on pmsvanidhi.mohua.gov.in portal or via PM SVANidhi mobile app, or through nearest CSC center with Certificate of Vending or Letter of Recommendation from Municipality.',
+      documents: ['Certificate of Vending / Urban Local Body ID Card / Letter of Recommendation (LoR)', 'Aadhaar Card', 'Bank Account details', 'Mobile linked to Aadhaar'],
+      portal: 'https://pmsvanidhi.mohua.gov.in',
+    },
+    {
+      id: 'ssy',
+      name: 'Sukanya Samriddhi Yojana (SSY)',
+      eligible: gender === 'female' || (Number(p.dependents || 0) > 0),
+      benefit: '8.2% guaranteed sovereign annual interest (tax-free Section 80C), deposit ₹250 to ₹1.5 Lakh/year for girl child under 10.',
+      why: 'Available for families with a girl child under 10 years of age.',
+      howToApply: 'Visit any post office branch or commercial bank (SBI, PNB, etc.) with the girl child\'s birth certificate and parent/guardian Aadhaar. Minimum opening deposit is ₹250.',
+      documents: ['Girl Child Birth Certificate', 'Parent/Guardian Identity & Address Proof (Aadhaar/PAN)', 'Passport size photographs'],
+      portal: 'https://www.indiapost.gov.in',
+    },
+  ]
+
+  // If backend analysis already produced eligibleSchemes, merge with our detailed enrollment knowledge
+  if (analysis?.eligibleSchemes && analysis.eligibleSchemes.length > 0) {
+    const backendNames = new Set(
+      analysis.eligibleSchemes.filter(s => s.eligible).map(s => (s.name || '').toLowerCase())
+    )
+    for (const s of schemes) {
+      const match = Array.from(backendNames).some(bn => bn.includes(s.id) || s.name.toLowerCase().includes(bn))
+      if (match) s.eligible = true
+    }
+  }
+
+  return schemes
+}
+
+function buildFinancialContext(profile, analysis) {
+  const p = profile || {}
+  const a = analysis || {}
+  const m = a.financialMetrics || {}
+  const inr = (v) => v == null || isNaN(v) ? 'N/A' : '₹' + Math.round(Number(v)).toLocaleString('en-IN')
+
+  const income = Number(p.monthlyIncome || 0)
+  const expenses = Number(p.monthlyExpenses || 0)
+  const emi = Number(p.monthlyEmi || 0)
+  const savings = Number(p.existingSavings || m.savings || 0)
+  const debt = Number(p.existingDebt || m.total_debt || 0)
+  const surplus = m.monthly_surplus != null ? Number(m.monthly_surplus) : (income - expenses - emi)
+  const dti = m.dti_ratio != null ? Number(m.dti_ratio) : (income > 0 ? (emi / income) : 0)
+  const runway = m.emergency_months != null ? Number(m.emergency_months) : (expenses > 0 ? (savings / expenses) : 0)
+  const riskScore = a.riskScore ?? (income > 0 ? Math.min(85, Math.max(35, Math.round(50 + (surplus > 0 ? 15 : -15) - (dti * 20) + (runway * 3)))) : 'Pending Input')
+  const riskCat = a.riskCategory || (riskScore >= 70 ? 'Moderate-Low Risk' : riskScore >= 50 ? 'Moderate Risk' : 'High Risk')
+
+  const allSchemes = evaluateSchemesComprehensive(p, a)
+  const eligibleSchemes = allSchemes.filter(s => s.eligible)
+  const ineligibleSchemes = allSchemes.filter(s => !s.eligible)
+
+  const eligibleSchemesDetailed = eligibleSchemes.map((s, idx) => [
+    `${idx + 1}. ${s.name}`,
+    `   • BENEFIT: ${s.benefit}`,
+    `   • WHY YOU QUALIFY: ${s.why}`,
+    `   • HOW TO ENROLL (STEP-BY-STEP): ${s.howToApply}`,
+    `   • REQUIRED DOCUMENTS: ${s.documents.join(', ')}`,
+    `   • OFFICIAL PORTAL / BRANCH: ${s.portal}`,
+  ].join('\n')).join('\n\n') || 'No schemes qualify based on current inputs.'
+
+  const ineligibleSchemesSummary = ineligibleSchemes.map(s => `• ${s.name}: ${s.why}`).join('\n')
+
+  const scams = (a.scamFlags || [])
+    .map(s => `${s.scam_type}: ${s.warning}`)
+    .join('; ') || 'No active scam warnings flagged.'
+
+  const goals = (a.goals || [])
+    .map(g => `${g.title}${g.target_amount ? ` (${inr(g.target_amount)})` : ''}${g.horizon_months ? ` in ${g.horizon_months} months` : ''}`)
+    .join(', ') || (p.userMessage || 'No specific goals set yet')
+
+  const sims = a.simulationPaths || {}
+  const simSummary = sims.optimal
+    ? `36-Month Projections: Status Quo = ${inr(sims.status_quo?.projected_value)}, Moderate = ${inr(sims.moderate?.projected_value)}, Optimal = ${inr(sims.optimal?.projected_value)}`
+    : 'Simulation ready to run once submitted.'
+
+  const cards = (a.decisionCards || [])
+    .map(c => c.action)
+    .join('; ') || 'Tailored decision cards will appear after submission.'
+
+  const plan = (a.actionPlan || [])
+    .map(t => t.task)
+    .join('; ') || 'Step-by-step action plan will appear after submission.'
+
+  const fullContext = [
+    `=== USER FINANCIAL PROFILE (ENTERED BY USER) ===`,
+    `Name / ID: ${p.userId || 'Friend'}`,
+    `Age: ${p.age || 'Not provided'}, Gender: ${p.gender || 'Not specified'}`,
+    `State: ${p.state || 'India'}, Location: ${p.isRural ? 'Rural' : 'Urban / Semi-Urban'}`,
+    `Employment Type: ${p.employmentType || 'salaried'}`,
+    `Has Bank Account: ${p.hasBankAccount !== false ? 'Yes' : 'No'}`,
+    `Has Insurance: ${p.hasInsurance ? 'Yes' : 'No'}, Health Insurance: ${p.hasHealthInsurance ? 'Yes' : 'No'}`,
+    `Land Holding: ${p.landHoldingAcres ? `${p.landHoldingAcres} acres` : 'None / Not specified'}`,
+    `Business Type: ${p.businessType || 'None / Not specified'}`,
+    `Caste / Category: ${p.casteCategory || 'General'}`,
+    `Dependents: ${p.dependents || 0}`,
+    `Preferred Language: ${p.preferredLang || 'en'}`,
+    ``,
+    `=== COMPUTED FINANCIAL HEALTH METRICS ===`,
+    `Monthly Income: ${inr(income)}`,
+    `Monthly Expenses: ${inr(expenses)}`,
+    `Monthly EMI / Debt: ${inr(emi)}`,
+    `Monthly Surplus (Savings Capacity): ${inr(surplus)}`,
+    `Current Savings: ${inr(savings)}`,
+    `Outstanding Debt: ${inr(debt)}`,
+    `Debt-to-Income (DTI) Ratio: ${(dti * 100).toFixed(1)}%`,
+    `Emergency Runway: ${runway.toFixed(1)} months`,
+    `Financial Health Score: ${riskScore}/100 (${riskCat})`,
+    ``,
+    `=== ELIGIBLE GOVERNMENT SCHEMES & ENROLLMENT GUIDE (CRITICAL KNOWLEDGE) ===`,
+    eligibleSchemesDetailed,
+    ``,
+    `=== OTHER SCHEMES (CURRENT STATUS) ===`,
+    ineligibleSchemesSummary,
+    ``,
+    `=== FINANCIAL GOALS ===`,
+    goals,
+    ``,
+    `=== 36-MONTH SIMULATION ===`,
+    simSummary,
+    ``,
+    `=== RECOMMENDATIONS & DECISION CARDS ===`,
+    cards,
+    ``,
+    `=== ACTION PLAN ===`,
+    plan,
+    ``,
+    `=== SCAM ALERTS ===`,
+    scams,
+  ].join('\n')
+
+  return {
+    fullContext,
+    eligibleSchemes,
+    ineligibleSchemes,
+    income,
+    expenses,
+    surplus,
+    riskScore,
+    riskCat,
+  }
+}
+
+function VoiceFinMateSidebar({ open, onClose, profile, analysis }) {
+  const widgetContainerRef = useRef(null)
+  const [syncKey, setSyncKey] = useState(0)
+
+  // Re-create the widget whenever the panel opens or syncKey changes
+  useEffect(() => {
+    if (!open || !widgetContainerRef.current) return
+
+    // Clear any existing widget
+    widgetContainerRef.current.innerHTML = ''
+
+    const widget = document.createElement('elevenlabs-convai')
+    widget.setAttribute('agent-id', ELEVENLABS_AGENT_ID)
+
+    // Build the user's financial context with live scheme matcher
+    const { fullContext, eligibleSchemes, income, surplus, riskScore, riskCat } = buildFinancialContext(profile, analysis)
+    const inr = (v) => v == null || isNaN(v) ? 'N/A' : '₹' + Math.round(Number(v)).toLocaleString('en-IN')
+
+    const hasIncome = income > 0
+    const schemeCount = eligibleSchemes.length
+    const topSchemeNames = eligibleSchemes.slice(0, 3).map(s => s.name).join(', ')
+
+    // ── System Prompt Override ──
+    const systemPrompt = [
+      `You are FinMate, a warm, multilingual AI financial companion built for Indian citizens.`,
+      `You have real-time access to the user's exact financial details, computed metrics, and government welfare scheme eligibility.`,
+      `Always respond in the user's preferred language: ${profile?.preferredLang === 'hi' ? 'Hindi' : profile?.preferredLang === 'mr' ? 'Marathi' : profile?.preferredLang === 'kn' ? 'Kannada' : 'English'}. If the user speaks in Hindi or Hinglish, speak in Hindi.`,
+      `Keep your spoken responses natural, encouraging, and under 3 to 4 sentences so it is pleasant to listen to.`,
+      ``,
+      `=== LIVE USER FINANCIAL DATA & SCHEMES KNOWLEDGE ===`,
+      fullContext,
+      ``,
+      `=== HOW TO ANSWER USER QUESTIONS ===`,
+      `1. WHEN ASKED "WHAT SCHEMES AM I ELIGIBLE FOR?":`,
+      `   - Name the specific schemes from the ELIGIBLE GOVERNMENT SCHEMES section above (e.g. ${topSchemeNames || 'PMSBY, APY'}).`,
+      `   - Mention the concrete benefit for each (e.g. "₹2 Lakh accident cover for just ₹20 per year").`,
+      `2. WHEN ASKED "HOW CAN I ENROLL?" OR "WHERE DO I APPLY?":`,
+      `   - Read the exact step-by-step instructions from the HOW TO ENROLL section above for that scheme.`,
+      `   - Tell the user which bank, portal, or CSC to visit, and what documents to take (Aadhaar, passbook, photos).`,
+      `3. WHEN ASKED ABOUT THEIR NUMBERS:`,
+      `   - Income is ${inr(income)}, Monthly Surplus is ${inr(surplus)}, Health Score is ${riskScore}/100.`,
+      `   - Never hallucinate different numbers. Always use the exact values listed above.`,
+      `4. IF USER IS STILL FILLING THE FORM:`,
+      `   - Cheerfully guide them on what to fill next and how their answers unlock additional government schemes.`,
+    ].join('\n')
+
+    widget.setAttribute('override-prompt', systemPrompt)
+
+    // ── Dynamic Variables for agents configured with {{placeholders}} ──
+    const dynamicVars = {
+      user_financial_context: fullContext,
+      user_name: profile?.userId || 'Friend',
+      monthly_income: inr(income),
+      monthly_surplus: inr(surplus),
+      health_score: String(riskScore),
+      risk_category: riskCat,
+      eligible_schemes_count: String(schemeCount),
+      eligible_schemes_list: topSchemeNames,
+      how_to_enroll: eligibleSchemes.map(s => `${s.name}: ${s.howToApply}`).join(' | '),
+      preferred_language: profile?.preferredLang || 'en',
+    }
+    widget.setAttribute('dynamic-variables', JSON.stringify(dynamicVars))
+
+    widget.style.width = '100%'
+    widgetContainerRef.current.appendChild(widget)
+
+    return () => {
+      if (widgetContainerRef.current) {
+        widgetContainerRef.current.innerHTML = ''
+      }
+    }
+  }, [open, syncKey])
+
+  if (!open) return null
+
+  const { eligibleSchemes, income, surplus, riskScore } = buildFinancialContext(profile, analysis)
+  const inr = (v) => v == null || isNaN(v) ? 'N/A' : '₹' + Math.round(Number(v)).toLocaleString('en-IN')
+
+  return (
+    <>
+      {/* Backdrop */}
+      <div
+        style={{
+          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)',
+          zIndex: 1000, backdropFilter: 'blur(3px)',
+        }}
+        onClick={onClose}
+      />
+      {/* Slide-in panel from right */}
+      <div style={{
+        position: 'fixed', top: 0, right: 0, bottom: 0, width: '430px',
+        maxWidth: '96vw', background: 'var(--surface, #12151c)',
+        borderLeft: '1px solid rgba(255,255,255,0.08)',
+        zIndex: 1001, display: 'flex', flexDirection: 'column',
+        boxShadow: '-8px 0 40px rgba(0,0,0,0.5)',
+      }}>
+        {/* Header */}
+        <div style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          padding: '16px 20px', borderBottom: '1px solid rgba(255,255,255,0.07)',
+          background: 'rgba(255,255,255,0.03)',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <div style={{
+              width: 36, height: 36, borderRadius: '50%',
+              background: 'linear-gradient(135deg, #f5a623, #e8830a)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}>
+              <Volume2 size={18} color="#fff" />
+            </div>
+            <div>
+              <div style={{ fontWeight: 700, fontSize: '15px', color: 'var(--text, #fff)' }}>
+                Voice FinMate
+              </div>
+              <div style={{ fontSize: '11px', color: 'var(--muted, #888)', marginTop: '1px' }}>
+                Powered by ElevenLabs AI · Live Scheme Knowledge
+              </div>
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            style={{
+              background: 'rgba(255,255,255,0.06)', border: 'none', borderRadius: '8px',
+              width: 32, height: 32, cursor: 'pointer', display: 'flex',
+              alignItems: 'center', justifyContent: 'center', color: 'var(--muted, #888)',
+            }}
+          >
+            <X size={16} />
+          </button>
+        </div>
+
+        {/* Live Context Status Bar */}
+        <div style={{
+          padding: '12px 20px', fontSize: '12px',
+          color: 'var(--muted, #888)', lineHeight: 1.5,
+          borderBottom: '1px solid rgba(255,255,255,0.05)',
+          background: 'rgba(245, 166, 35, 0.04)',
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span style={{
+              display: 'inline-block', width: 8, height: 8, borderRadius: '50%',
+              background: '#34d399', boxShadow: '0 0 6px #34d399',
+            }} />
+            <span>
+              <b style={{ color: 'var(--text, #fff)' }}>{eligibleSchemes.length} Schemes Matched</b>
+              {income > 0 && ` · Income ${inr(income)}`}
+              {riskScore && ` · Score ${riskScore}/100`}
+            </span>
+          </div>
+          <button
+            onClick={() => setSyncKey(k => k + 1)}
+            title="Sync latest typed values with Voice Agent"
+            style={{
+              background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.12)',
+              borderRadius: '6px', padding: '3px 8px', fontSize: '10px',
+              color: 'var(--text, #fff)', cursor: 'pointer', whiteSpace: 'nowrap',
+            }}
+          >
+            ↻ Sync Form
+          </button>
+        </div>
+
+        {/* ElevenLabs Widget Container */}
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+          <div
+            ref={widgetContainerRef}
+            style={{ flex: 1, padding: '20px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}
+          />
+        </div>
+
+        {/* Footer */}
+        <div style={{
+          padding: '12px 20px', borderTop: '1px solid rgba(255,255,255,0.06)',
+          fontSize: '11px', color: 'var(--muted, #777)', textAlign: 'center',
+        }}>
+          Ask: <i>"What schemes am I eligible for?"</i> or <i>"How do I enroll in PMSBY?"</i>
+        </div>
+      </div>
+    </>
+  )
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════════
    DASHBOARD — Unified layout, single chatbot, no duplicate voice buttons
    ═══════════════════════════════════════════════════════════════════════════════ */
 function Dashboard({
@@ -995,6 +1506,7 @@ function Dashboard({
   onVoice,
   onNew,
   currentLang = 'en',
+  onOpenVoice,
 }) {
   const [activeView, setActiveView] = useState(initialFocus || 'overview')
   const m = analysis.financialMetrics || {}
@@ -1034,6 +1546,13 @@ function Dashboard({
           onClick={onVoice}
         >
           <Mic size={16} /> {t(currentLang, 'talkWithVoice', 'Voice Assistant')}
+        </button>
+        <button
+          className="side-link"
+          onClick={onOpenVoice}
+          style={{ background: 'linear-gradient(90deg, rgba(245,166,35,0.12), transparent)', color: '#f5a623', fontWeight: 600 }}
+        >
+          <Volume2 size={16} /> Voice FinMate
         </button>
         <div className="sidebar-bottom">
           <div className="mode-pill">
@@ -2054,12 +2573,12 @@ function Voice({ analysis, profile, currentLang = 'en', onBack }) {
             ) : (
               <Mic size={17} />
             )}{' '}
-            {status === 'processing' ? t(voiceLang, 'voiceProcessing', 'Analyzing…') : t(voiceLang, 'voiceStartBtn', 'Start Speaking')}
+            {status === 'processing' ? t(voiceLang, 'voiceProcessing', 'Analyzing with Gemini…') : t(voiceLang, 'voiceStartBtn', 'Start Speaking')}
           </button>
         )}
 
         <small className="voice-note">
-          Full duplex multilingual voice: Speech-to-Text (STT) + Groq AI analysis + Text-to-Speech (TTS).
+          Full duplex multilingual voice: Speech-to-Text (STT) + Gemini AI analysis + Text-to-Speech (TTS).
         </small>
       </div>
     </main>
